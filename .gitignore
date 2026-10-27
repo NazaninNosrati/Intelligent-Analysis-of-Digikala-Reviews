@@ -1,0 +1,34 @@
+# Data files (too large for git)
+data/
+*.csv
+*.rar
+*.zip
+*.parquet
+
+# Model artifacts (large)
+artifacts/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.h5
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
