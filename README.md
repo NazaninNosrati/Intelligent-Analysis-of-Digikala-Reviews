@@ -14,7 +14,7 @@ The project includes:
 - A semi-supervised experiment with pseudo-labeling (confidence threshold = 0.90)
 - Error analysis and offline inference
 
-## 🗂️ Repository Structure
+## Repository Structure
 
 ```text
 project-3/
@@ -30,7 +30,7 @@ project-3/
 ├── .gitignore
 └── README.md
 
-###  Distribution of `rate`: Skewness, Concentration, and Most Frequent Values
+### Distribution of `rate`: Skewness, Concentration, and Most Frequent Values
 
 | rate | count (n) | percentage (pct) | cumulative pct |
 |---|---|---|---|
@@ -49,3 +49,26 @@ project-3/
 **What it means:** The `rate` distribution is skewed and concentrated, exhibiting a J-shaped pattern (a peak at 5, a steep decline, and a small bump at 0 and 1). With the project thresholds, the derived `rating_band` is expected to be relatively imbalanced (with the `high` band dominant).
 
 **What I will do:** For `rating_band`, I will use class weighting and ordinal distance error. I will remove the record with `rate = 2500` as invalid data.
+
+## Part A — Descriptive Analysis:
+
+### A1. Dataset Size and Structure
+
+- **Total records:** 6,156,289 (counted via DuckDB parser, not physical lines)
+- **Columns:** 15 (all required columns present, no extra columns)
+- **Unique products:** 331,599
+- **Unique sellers:** 29,214
+- **File size:** 1.28 GB (CSV) → compressed to Parquet with ZSTD
+
+**Review distribution per product:**
+- Median: 4 reviews
+- Mean: 18.57 (std = 40.93 → right-skewed)
+- 90th percentile: 46
+- 99th percentile: 200
+- Max: 400
+
+**Product concentration:**
+- Top 10 products account for only **0.05%** of all reviews
+- No product has more than 1,000 reviews
+
+**Decision:** A product-grouped split is required to prevent the model from memorizing product-specific patterns. See A5 for the updated justification.
