@@ -29,6 +29,7 @@ project-3/
 ├── requirements.txt
 ├── .gitignore
 └── README.md
+```
 
 ### Distribution of `rate`: Skewness, Concentration, and Most Frequent Values
 
@@ -72,3 +73,47 @@ project-3/
 - No product has more than 1,000 reviews
 
 **Decision:** A product-grouped split is required to prevent the model from memorizing product-specific patterns. See A5 for the updated justification.
+
+**Artifacts:** (../reports/fig1_comments_per_product.png)
+
+### A2. Missing-Value Patterns
+
+**What I observed:** Missing values are concentrated in metadata columns, not in the core modeling columns. The missing counts and percentages per column are:
+
+| Column | Missing | Percentage |
+|---|---|---|
+| `true_to_size_rate` | 6,065,516 | 98.53% |
+| `disadvantages` | 5,744,017 | 93.30% |
+| `advantages` | 5,448,084 | 88.50% |
+| `title` | 2,866,415 | 46.56% |
+| `recommendation_status` | 894,426 | 14.53% |
+| `seller_title` | 302,181 | 4.91% |
+| `seller_code` | 302,181 | 4.91% |
+| `body` | 637 | 0.01% |
+| `rate`, `created_at`, `id`, `is_buyer`, `product_id`, `likes`, `dislikes` | 0 | 0.00% |
+
+The core input column `body` has only **637 missing values (0.01%)**. Columns such as `id`, `created_at`, `rate`, `is_buyer`, `product_id`, `likes`, and `dislikes` have **zero missing values** because they are either system-generated (`id`, `created_at`, `product_id`, `is_buyer`), mandatory for review submission (`rate`), or have a default value of 0 (`likes`, `dislikes`). In contrast, columns with high missing rates (`title`, `advantages`, `disadvantages`, `true_to_size_rate`) are **optional** fields that users frequently skip.
+
+**Structural analysis of missing labels:** The cross-tabulation of `label_missing × is_buyer` reveals a fully structural pattern:
+
+| label_missing | is_buyer | Count |
+|---|---|---|
+| False | True | 5,261,863 |
+| True | False | 302,181 |
+| True | True | 592,245 |
+
+- **All non-buyers (302,181 records) have missing labels** — 100% of `is_buyer=False` rows lack `recommendation_status`.
+- Among buyers, **5,261,863 (89.9%) have labels** and **592,245 (10.1%) do not**.
+- There is **no row** with `label_missing=False` and `is_buyer=False`.
+
+Additionally, rows with missing labels have a **higher mean rate (4.04 vs 3.58)**, although the median is identical (4.0), suggesting that unlabeled users skew toward higher ratings.
+
+**What it means:** Missing labels are structurally biased: non-buyers never provide a recommendation label, and even among buyers, ~10% skip it. Users without labels tend to give slightly higher ratings. This means missingness is **not MCAR (Missing Completely At Random)** — it is structurally tied to `is_buyer` and `rate`, consistent with a **MAR (Missing At Random)** pattern.
+
+**What I will do:**
+1. Keep missing-label rows in the **natural unlabeled pool** (do not discard them) — they are valuable for the semi-supervised experiment.
+2. Drop the **637 rows with missing `body`** since `body` is the only model input.
+3. Do not use `is_buyer` as a feature (it is metadata and would leak label availability).
+4. Report the structural missingness as evidence that the dataset's unlabeled pool is not random.
+
+**Artifacts:** `reports/missing_by_column.csv`
