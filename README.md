@@ -29,3 +29,23 @@ project-3/
 ├── requirements.txt
 ├── .gitignore
 └── README.md
+
+###  Distribution of `rate`: Skewness, Concentration, and Most Frequent Values
+
+| rate | count (n) | percentage (pct) | cumulative pct |
+|---|---|---|---|
+| 5.0 | 2,398,801 | 38.97% | 38.97% |
+| 4.0 | 1,515,723 | 24.62% | 63.59% |
+| 3.0 | 958,799 | 15.57% | 79.16% |
+| 0.0 | 529,098 | 8.59% | 87.75% |
+| 1.0 | 327,662 | 5.32% | 93.08% |
+| 4.8 | 7,276 | 0.12% | 98.02% |
+| 3.4 | 7,250 | 0.12% | 98.13% |
+| 3.6 | 6,975 | 0.11% | 98.25% |
+| 2.5 | 5,438 | 0.09% | 98.34% |
+
+**What I observed:** The `rate` column contains **178 unique values** ranging from 0 to 2500 (one record with value 2500 is outside the valid 0–5 range and is invalid). The distribution is heavily right-skewed: the value 5.0 with **38.97%**, 4.0 with **24.62%**, and 3.0 with **15.57%** are the most frequent values. The five most frequent values (5, 4, 3, 0, 1) together cover **93.08%** of the data, and the top 20 values cover **98.34%** — indicating a highly concentrated distribution. Notably, `rate = 0.0` accounts for **8.59%** (about 529k records), showing that a substantial portion of users gave a zero rating (not missing data). Additionally, `rate = 2.0` does not appear among the top 20 values — a pattern consistent with the "polarization of opinions" phenomenon (users are either highly satisfied or highly dissatisfied).
+
+**What it means:** The `rate` distribution is skewed and concentrated, exhibiting a J-shaped pattern (a peak at 5, a steep decline, and a small bump at 0 and 1). With the project thresholds, the derived `rating_band` is expected to be relatively imbalanced (with the `high` band dominant).
+
+**What I will do:** For `rating_band`, I will use class weighting and ordinal distance error. I will remove the record with `rate = 2500` as invalid data.
