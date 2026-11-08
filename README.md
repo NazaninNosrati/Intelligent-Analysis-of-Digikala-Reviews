@@ -152,3 +152,22 @@ At `rate = 0.0`, **80.5%** of users still marked `recommended` — a surprising 
 **What it means:** While there is a general correlation between `rate` and `recommendation_status`, the data contains **contradictory labels** (e.g., `rate = 0` with `recommended`). This confirms that `rate` should not be used as a model feature, and that the label space has noise that will affect error analysis.
 
 **What I will do:** Flag contradictory rows (e.g., `rate = 0` + `recommended`) as potential label noise for the error analysis in Part C.
+
+### A4. Text-Length Analysis
+
+**What I observed:** The `body` column has a heavily right-skewed length distribution. The median is **106 characters (22 words)**, with the 90th percentile at **152 characters (32 words)**, the 95th at **297 characters (61 words)**, and the 99th at **~297+ characters**. Short reviews dominate: **34.06%** of reviews are under 20 characters, **70.37%** are under 50 characters, and **35.69%** are under 5 words. In contrast, long reviews are rare: only **0.23%** exceed 500 characters and **0.03%** exceed 1,000 characters.
+
+**Length by label:**
+
+| Label | Count | Median chars | p90 chars | Median words |
+|---|---|---|---|---|
+| `recommended` | 4,162,839 | 27 | 95 | 6 |
+| `<MISSING>` | 894,426 | 25 | 105 | 5 |
+| `no_idea` | 594,121 | 38 | 129 | 8 |
+| `not_recommended` | 504,903 | 48 | 159 | 10 |
+
+**What it means:** The distribution is heavily right-skewed, with most reviews being very short and only a tiny fraction being long. There is a clear pattern across labels: `recommended` reviews are the shortest (median 27 chars), while `not_recommended` reviews are the longest (median 48 chars). This suggests that dissatisfied users tend to write more detailed reviews, while satisfied users often leave brief comments. Text length is therefore a weak signal for label prediction, but it is not sufficient on its own.
+
+**What I will do:** Given that **97% of reviews are under ~61 words**, I will set the Transformer `max_length = 128` tokens. This covers the vast majority of reviews while keeping GPU memory usage reasonable. The ~0.23% of reviews longer than 500 characters will be truncated, which is acceptable given their rarity. The 34% of very short reviews (under 20 chars) will be kept as-is — they are valid inputs and will test the model's ability to classify on minimal text.
+
+**Artifacts:** `reports/fig3_body_length.png`, `reports/A4_quantiles.csv`, `reports/A4_short_long.csv`, `reports/A4_length_by_label.csv`
