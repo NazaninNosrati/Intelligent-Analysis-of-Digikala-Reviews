@@ -117,3 +117,38 @@ Additionally, rows with missing labels have a **higher mean rate (4.04 vs 3.58)*
 4. Report the structural missingness as evidence that the dataset's unlabeled pool is not random.
 
 **Artifacts:** `reports/missing_by_column.csv`
+
+#### A3-a. Distribution of `recommendation_status`
+
+**What I observed:** The `recommendation_status` column contains four categories:
+
+| Label | Count | Percentage |
+|---|---|---|
+| `recommended` | 4,162,839 | 67.6% |
+| `<MISSING>` (originally `"nan"`) | 894,426 | 14.5% |
+| `no_idea` | 594,121 | 9.6% |
+| `not_recommended` | 504,903 | 8.2% |
+
+The label `"nan"` was stored as a string in the raw CSV (due to `all_varchar=true` during ingestion) and has been normalized to `<MISSING>` for analysis.
+
+**What it means:** The label distribution is heavily imbalanced: `recommended` accounts for 67.6% of the data, while `not_recommended` accounts for only 8.2% — an approximately 8:1 ratio. A naive model that always predicts `recommended` would achieve 67.6% accuracy without learning anything. Accuracy is therefore a misleading metric.
+
+**What I will do:** Use **class weighting** and **Macro F1** (instead of accuracy) for evaluation. The `<MISSING>` rows are kept in the natural unlabeled pool for the semi-supervised experiment.
+
+**Artifacts:**(../reports/fig2_labels_and_rate.png)
+
+#### A3-c. Cross-tabulation: `recommendation_status` × `rate`
+
+**What I observed:** The cross-tabulation (row-normalized, in %) reveals:
+
+| rate | `<MISSING>` | `no_idea` | `not_recommended` | `recommended` |
+|---|---|---|---|---|
+| 0.00 | 4.8% | 3.9% | 10.9% | **80.5%** |
+| 0.05 | 3.1% | 10.3% | **83.5%** | 3.1% |
+| 5.00 | 18.1% | 0.6% | 0.3% | **81.0%** |
+
+At `rate = 0.0`, **80.5%** of users still marked `recommended` — a surprising contradiction (zero stars but a positive recommendation). At `rate = 0.05`, **83.5%** marked `not_recommended` — a more intuitive pattern. At `rate = 5.0`, **81.0%** marked `recommended`.
+
+**What it means:** While there is a general correlation between `rate` and `recommendation_status`, the data contains **contradictory labels** (e.g., `rate = 0` with `recommended`). This confirms that `rate` should not be used as a model feature, and that the label space has noise that will affect error analysis.
+
+**What I will do:** Flag contradictory rows (e.g., `rate = 0` + `recommended`) as potential label noise for the error analysis in Part C.
