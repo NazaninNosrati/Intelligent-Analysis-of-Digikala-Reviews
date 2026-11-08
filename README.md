@@ -171,3 +171,30 @@ At `rate = 0.0`, **80.5%** of users still marked `recommended` — a surprising 
 **What I will do:** Given that **97% of reviews are under ~61 words**, I will set the Transformer `max_length = 128` tokens. This covers the vast majority of reviews while keeping GPU memory usage reasonable. The ~0.23% of reviews longer than 500 characters will be truncated, which is acceptable given their rarity. The 34% of very short reviews (under 20 chars) will be kept as-is — they are valid inputs and will test the model's ability to classify on minimal text.
 
 **Artifacts:** `reports/fig3_body_length.png`, `reports/A4_quantiles.csv`, `reports/A4_short_long.csv`, `reports/A4_length_by_label.csv`
+
+### A5. Repetition, Conflicts, and Product Concentration
+
+**Duplicate review bodies:** The dataset contains **197,746 unique bodies that appear more than once**, covering **2,217,778 rows** — i.e., **36.0% of all 6.16 million records** share a body with at least one other row. The 15 most frequent repeated bodies are all very short generic comments:
+
+| Body | Count |
+|---|---|
+| عالی | 121,349 |
+| خوب بود | 73,854 |
+| خوبه | 72,210 |
+| خوب | 64,297 |
+| عالی بود | 23,598 |
+
+This is consistent with the A4 finding that 34% of reviews are under 20 characters.
+
+**Conflicting labels:** **75,365 unique bodies** carry conflicting `recommendation_status` labels (e.g., the same text labeled `recommended` by one user and `not_recommended` by another). This is direct evidence of **label noise** in the dataset.
+
+**Conflicting rates:** **119,538 unique bodies** carry conflicting `rate` values — the same text receives different star ratings from different users. This is further evidence of noise and inconsistency in the human annotation process.
+
+**What it means:** Repetition is substantial (36% of rows share a body), but most duplicates are short, generic comments. More importantly, **the same body can carry different labels and different rates** — 75k and 120k cases respectively — confirming that the labels are noisy and that text alone cannot perfectly predict the target. This also explains the `rate = 0` + `recommended` contradiction observed in A3-c.
+
+**What I will do:**
+1. **Flag** duplicate bodies (`is_duplicate_body = 1`) but **do not remove them** — they represent distinct users and products, and removing 36% of the data would discard valuable information.
+2. Flag rows with conflicting labels (`is_label_conflict = 1`) for the error analysis in Part C.
+3. Keep all rows in the training set; the model will learn to handle the noise, and the error analysis will inspect whether these rows dominate the misclassifications.
+
+**Artifacts:** `reports/top_repeated_bodies.csv`
