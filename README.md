@@ -232,3 +232,45 @@ These observations **suggest** (but do not prove) that `rate = 0` is noise. The 
 **Decision (provisional):** Variant B will be used for the initial `rating_band` training in Part C, with Variant A kept as a comparison baseline. The final choice will be validated empirically.
 
 **Artifacts:**(reports/fig6_rating_band.png)
+
+### A6. Vocabulary-Level Analysis (Optional Extension)
+
+**Sampling note:** This analysis uses a random sample of **123,334 reviews** (out of 6.16M). The sample is drawn from the full dataset; global statistics (A1–A5) remain computed on the full data.
+
+**Most frequent words:** The most frequent tokens mix stopwords and sentiment-bearing words:
+
+| Word | Count |
+|---|---|
+| بود | 27,795 |
+| خیلی | 27,361 |
+| خوب | 22,220 |
+| به | 21,762 |
+| از | 19,729 |
+| خوبه | 18,902 |
+| عالی | 16,112 |
+| کیفیت | 10,315 |
+| قیمت | 9,676 |
+| راضی | 6,584 |
+
+The frequent sentiment words (`خوب`, `عالی`, `راضی`) and product attributes (`کیفیت`, `قیمت`) confirm that reviews center on quality and price.
+
+**Class-specific bigrams:**
+
+| Class | Representative bigrams |
+|---|---|
+| `recommended` | «خیلی کیوته», «باصرفه», «خوبه توصیه», «کاملا مطابق», «راضی بودیم», «مناسب قیمت» |
+| `not_recommended` | «پول دور», «اصلا نخرید», «آشغال», «افتضاح بود», «مزخرف», «درد نخور», «حیف پول» |
+| `no_idea` | «خاصی ندیدم», «مطمئن نیستم», «تاثیر خاصی», «خیلی معمولی», «مناسب نبود» |
+| `<MISSING>` | «موجودش», «لطفا موجود کنید», «نخریدم», «بیرون خریدم», «نگرفتم», «چراغ قوه» |
+
+**Key finding — why `<MISSING>` rows lack labels:** The bigrams for `<MISSING>` reveal two distinct user groups:
+1. **Users who have not bought the product** («نخریدم» = I didn't buy, «بیرون خریدم» = I bought elsewhere, «نگرفتم» = I didn't get it) — they cannot recommend or not recommend a product they haven't used.
+2. **Users who only request restocking** («موجودش» = make it available, «لطفا موجود کنید» = please restock) — their comment is about availability, not the product.
+
+This **confirms the A2 finding** that missing labels are structural, not random: unlabeled users genuinely cannot provide a recommendation.
+
+**Stopword handling:** Stopwords (`به`, `از`, `که`, `من`, `برای`) are frequent but are **not removed** at this stage. As the project requires, stopword removal will be treated as an **experiment** in Part B, not as a fixed preprocessing rule — because negations (`نه`, `نیست`) and discourse markers (`ولی`) carry sentiment information.
+
+**What I will do:** In Part B, I will test two normalization variants (with and without stopword removal) and compare their impact on the TF-IDF baseline in Part C.
+
+**Artifacts:** `reports/A6_frequent_words.csv`, `reports/A6_class_bigrams.csv`
