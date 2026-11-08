@@ -198,3 +198,37 @@ This is consistent with the A4 finding that 34% of reviews are under 20 characte
 3. Keep all rows in the training set; the model will learn to handle the noise, and the error analysis will inspect whether these rows dominate the misclassifications.
 
 **Artifacts:** `reports/top_repeated_bodies.csv`
+
+#### A3-d. Derived `rating_band` Distribution (Variants A and B)
+
+**What I observed:** Two variants of `rating_band` were built using the project thresholds:
+
+**Variant A (standard):** follows the project rules unchanged (`rate = 0` → `low`).
+
+| Band | Count | Percentage |
+|---|---|---|
+| `medium` | 2,569,339 | 41.7% |
+| `high` | 2,489,182 | 40.4% |
+| `low` | 1,097,767 | 17.8% |
+| `invalid` | 1 | 0.0% |
+
+**Variant B (corrected):** treats `rate = 0` as invalid (likely a missing star rating) and also fixes the `rate = 2.5` boundary (`BETWEEN` vs. `<`).
+
+| Band | Count | Percentage |
+|---|---|---|
+| `medium` | 2,574,777 | 41.8% |
+| `high` | 2,489,182 | 40.4% |
+| `low` | 563,231 | 9.1% |
+| `invalid` | 529,099 | 8.6% |
+
+**Difference:** Variant B reduces `low` from 17.8% to 9.1% (a drop of ~534k rows), because all `rate = 0` rows are moved to `invalid`. It also fixes a subtle boundary issue in Variant A: under `BETWEEN 0 AND 2.5`, the value `rate = 2.5` was being captured by the `low` clause (since `BETWEEN` is inclusive), incorrectly placing ~5,438 rows in `low`. Variant B places `rate = 2.5` correctly in `medium`.
+
+**Suspicion (to be confirmed in Part C):** `rate = 0` exhibits anomalous behavior:
+- **80.5%** of `rate = 0` rows carry the `recommended` label — a contradiction under the "zero stars = very dissatisfied" interpretation.
+- The `rate` distribution has an unnatural spike at 0 (8.59%), higher than `rate = 1` (5.32%) and `rate = 2` (nearly absent). This pattern is more consistent with "missing star rating" than with a valid 0–5 satisfaction scale.
+
+These observations **suggest** (but do not prove) that `rate = 0` is noise. The definitive test will be conducted in Part C: two `rating_band` models will be trained (Variant A with `rate = 0` → `low`, Variant B without) and compared on Macro F1, ordinal distance error, and confusion matrix. The final decision will be based on that comparison, not on the suspicion alone.
+
+**Decision (provisional):** Variant B will be used for the initial `rating_band` training in Part C, with Variant A kept as a comparison baseline. The final choice will be validated empirically.
+
+**Artifacts:**(reports/fig6_rating_band.png)
