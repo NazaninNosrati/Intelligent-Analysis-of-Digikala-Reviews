@@ -274,3 +274,47 @@ This **confirms the A2 finding** that missing labels are structural, not random:
 **What I will do:** In Part B, I will test two normalization variants (with and without stopword removal) and compare their impact on the TF-IDF baseline in Part C.
 
 **Artifacts:** `reports/A6_frequent_words.csv`, `reports/A6_class_bigrams.csv`
+
+**Figure 5 — Median body length by label.** The median body length increases monotonically from satisfied to dissatisfied users:
+
+| Label | Median length (chars) |
+|---|---|
+| `<MISSING>` | 25 |
+| `recommended` | 27 |
+| `no_idea` | 38 |
+| `not_recommended` | **48** |
+
+Dissatisfied users write reviews that are ~1.8× longer than satisfied users (48 vs. 27 chars). This is a well-known psychological pattern: dissatisfied users need to justify their negative experience, while satisfied users often leave a brief "خوبه / عالیه". The `<MISSING>` group is the shortest — consistent with the A6 finding that unlabeled users are either restock-requesters or non-buyers who have little to say about the product.
+
+### A7. Summary and Decision Mapping
+
+This section summarizes the five key findings from Part A and maps each to a modeling decision.
+
+| # | Finding (with evidence) | Modeling Decision |
+|---|---|---|
+| 1 | **Severe label imbalance:** `recommended` = 67.6%, `not_recommended` = 8.2% (A3-a). | Use **class weighting** and **Macro F1** instead of accuracy. |
+| 2 | **Short reviews dominate:** median = 106 chars (~22 words); 97% of reviews < 297 chars (A4). | Set Transformer `max_length = 128` tokens. |
+| 3 | **High repetition:** 197,746 duplicate bodies cover 36% of all rows; 75k bodies carry conflicting labels (A5). | **Flag** duplicates and conflicts (`is_duplicate_body`, `is_label_conflict`), do **not** remove them. |
+| 4 | **`rate = 0` is anomalous:** 80.5% of `rate = 0` rows are labeled `recommended`; the distribution has an unnatural spike at 0 (A3-c). | Build two `rating_band` variants (A: standard, B: exclude `rate = 0`) and compare them in Part C. |
+| 5 | **Missing labels are structural:** 100% of non-buyers lack `recommendation_status`; missingness is tied to `is_buyer` and `rate` (A2). | Keep unlabeled rows in the natural unlabeled pool; do **not** discard them. |
+
+**Data provenance:**
+- Figures 1–5 and all tables (A1–A5) are computed on the **full dataset** (6,156,289 rows).
+- A6 (vocabulary analysis) uses a **random sample of 123,334 reviews** (seed = 42).
+- All global counts (row counts, class distributions, missing rates) are computed on the full data.
+
+**Artifacts:**
+- `reports/fig1_comments_per_product.png`
+- `reports/fig2_labels_and_rate.png`
+- `reports/fig3_body_length.png`
+- `reports/fig4_label_share_by_rate.png`
+- `reports/fig5_label_share_by_rate.png`
+- `reports/fig6_label_share_by_rate.png`
+- `reports/fig7_length_by_label.png`
+- `reports/missing_by_column.csv`
+- `reports/top_repeated_bodies.csv`
+- `reports/A4_quantiles.csv`
+- `reports/A4_short_long.csv`
+- `reports/A4_length_by_label.csv`
+- `reports/A6_frequent_words.csv`
+- `reports/A6_class_bigrams.csv`
