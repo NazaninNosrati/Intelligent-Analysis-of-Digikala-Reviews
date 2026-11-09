@@ -318,3 +318,124 @@ This section summarizes the five key findings from Part A and maps each to a mod
 - `reports/A4_length_by_label.csv`
 - `reports/A6_frequent_words.csv`
 - `reports/A6_class_bigrams.csv`
+
+---
+
+## Part B — Cleaning, Splitting, and Label Protocol
+
+This section describes the deterministic pipeline that transforms the raw dataset into the standard train/validation/test splits, including Persian text normalization, label mapping, rating-band derivation, product-grouped splitting, and the semi-supervised masking protocol. The entire pipeline is reproducible via `src/prepare_data.py`.
+
+### B1. Persian Text Normalization
+
+The normalization function (`src/text_norm.py`) applies the following transformations to the `body` column:
+
+| Transformation | Examples |
+|---|---|
+| Arabic → Persian letters | `ي → ی`, `ك → ک`, `ى → ی` |
+| Persian/Arabic digits → ASCII | `۰۱۲۳ → 0123`, `٠١٢٣ → 0123` |
+| Remove diacritics (harakat) | `U+064B` to `U+0652` |
+| Remove HTML tags | `<div>`, `<br>` |
+| Remove URLs | `https://...`, `www....` |
+| Collapse repeated letters | `خووووب → خووب` (3+ → 2) |
+| Zero-width space (`U+200B`) → regular space | |
+| Remove zero-width joiner / LRM / RLM / BOM | `U+200D`, `U+200E/200F`, `U+FEFF` |
+| **Keep** ZWNJ (`U+200C`) | Preserves Persian half-spaces: `می‌روم`, `کتاب‌ها` |
+| Keep emojis | Sentiment-bearing emojis are preserved |
+| No stopword / negation removal | `نه`, `نیست`, `ولی` are kept |
+
+After normalization, **215 rows** became empty (only URLs, HTML tags, or whitespace) and were dropped. The final normalized dataset contains **6,152,845 rows**.
+
+### B2. Label Mapping and Quality Gate
+
+The raw `recommendation_status` column was audited for unknown values:
+
+| Raw value | Mapped label |
+|---|---|
+| `recommended` | `recommended` |
+| `not_recommended` | `not_recommended` |
+| `no_idea` | `no_idea` |
+| `"nan"` (string) | `NULL` (missing label) |
+
+The quality gate excluded:
+- **3,229 duplicate IDs** (kept the first by `hash(body), product_id`)
+- **1 row with `rate = 2500`** (outside the valid 0–5 range)
+- **215 rows empty after normalization**
+
+No rows had missing `id`, `product_id`, or `body` (before normalization).
+
+### B3. Rating-Band Derivation (Variant B)
+
+The `rating_band` target was derived using **Variant B** (see A3-d):
+
+| Band | Threshold | Count (train) | Percentage (train) |
+|---|---|---|---|
+| `low` | `0 < rate < 2.5` | 393,941 | 9.2% |
+| `medium` | `2.5 ≤ rate < 4.0` | 740,945 | 17.2% |
+| `high` | `4.0 ≤ rate ≤ 5.0` | 2,801,794 | 65.0% |
+| `NULL` | `rate = 0`, `rate > 5`, or missing | 370,310 | 8.6% |
+
+The ordinal encoding is `low=0`, `medium=1`, `high=2` (stored in `split_manifest.json`). `rate = 0` is treated as `NULL` (likely a missing star rating, not a valid zero-star rating). This choice will be validated in Part C by comparing Variant A (standard) and Variant B.
+
+### B4. Product-Grouped Split
+
+A **product-grouped split** was used to prevent leakage. Products are sorted by `(-row_count, sha256(SPLIT_SEED | product_id))` and assigned greedily to minimize the normalized deviation from the 70/15/15 target across rows, 3 recommendation classes, and 3 rating bands.
+
+| Split | Products | Rows | Row % | Recommended | Not Recommended | No Idea | Label Missing |
+|---|---|---|---|---|---|---|---|
+| **train** | 294,063 | 4,306,990 | 69.97% | 2,912,438 (67.6%) | 353,151 (8.2%) | 415,585 (9.6%) | 625,816 (14.5%) |
+| **validation** | 18,762 | 922,927 | 14.99% | 624,094 (67.6%) | 75,675 (8.2%) | 89,054 (9.6%) | 134,104 (14.5%) |
+| **test** | 18,767 | 922,928 | 15.03% | 624,094 (67.6%) | 75,675 (8.2%) | 89,054 (9.6%) | 134,105 (14.5%) |
+
+The class distribution is nearly identical across splits, confirming that the greedy algorithm preserved representativeness.
+
+### B5. Semi-Supervised Masking Protocol
+
+The masking follows the project specification exactly:
+- `SPLIT_SEED = 2026`, `MASK_SEED = "digikala-semi-supervised-v1"`, `MASK_RATE = 0.20`
+- For each recommendation class in the training split, sort rows by `(stable_hash(id), id)` and mask `floor(0.20 × class_count)` rows.
+- Masked rows are moved to the artificial unlabeled pool. Validation and test rows are never masked.
+
+| Class | Labeled train rows | Masked | Kept supervised |
+|---|---|---|---|
+| `recommended` | 2,912,438 | 582,487 | 2,329,951 |
+| `no_idea` | 415,585 | 83,117 | 332,468 |
+| `not_recommended` | 353,151 | 70,630 | 282,521 |
+| **Total** | 3,681,174 | **736,234** | 2,944,940 |
+
+The total masked count (**736,234**) matches the size of `train_pseudo_unlabeled.csv` exactly (verified by assertion in the pipeline).
+
+### B6. Output Files
+
+| File | Rows | Description |
+|---|---|---|
+| `train_supervised.csv` | 3,555,676 | Train rows not masked, with at least one valid target (`recommendation_status` and/or `rating_band`) |
+| `train_pseudo_unlabeled.csv` | 736,234 | Masked train rows with only `id` and `body` (labels removed) |
+| `natural_unlabeled.csv` | 625,816 | Train rows with missing `recommendation_status` (id, body only) |
+| `validation.csv` | 917,793 | Validation rows with at least one valid target (never masked) |
+| `test.csv` | 917,785 | Test rows with at least one valid target (never masked) |
+
+The artificial unlabeled file contains only `id` and `body` — `recommendation_status`, `rating_band`, and `rate` were removed (as required). An assertion verifies that `train_pseudo_unlabeled.csv` has exactly these two columns.
+
+### B7. Split Manifest
+
+The complete manifest is saved to both `data/processed/split_manifest.json` and `reports/split_manifest.json`, and records:
+- seeds (`SPLIT_SEED`, `MASK_SEED`, `MASK_RATE`);
+- split strategy and target fractions;
+- achieved row fractions and products per split;
+- rating-band thresholds and encoding (Variant B);
+- label mapping;
+- normalization rules;
+- exclusions and duplicate policy;
+- per-split class and band statistics;
+- per-class masking counts;
+- output file row counts.
+
+**Artifacts:**
+- `data/processed/normalized.parquet`
+- `data/processed/train_supervised.csv`
+- `data/processed/train_pseudo_unlabeled.csv`
+- `data/processed/natural_unlabeled.csv`
+- `data/processed/validation.csv`
+- `data/processed/test.csv`
+- `data/processed/split_manifest.json`
+- `reports/split_manifest.json`

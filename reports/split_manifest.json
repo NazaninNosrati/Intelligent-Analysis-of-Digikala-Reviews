@@ -1,0 +1,132 @@
+{
+  "seeds": {
+    "SPLIT_SEED": 2026,
+    "MASK_SEED": "digikala-semi-supervised-v1",
+    "MASK_RATE": 0.2
+  },
+  "split_strategy": "product-grouped; products sorted by (-rows, sha256(SPLIT_SEED|product_id)); greedy assignment minimizing normalized deviation of rows, 3 recommendation classes and 3 rating bands from 70/15/15 targets",
+  "target_fractions": {
+    "train": 0.7,
+    "validation": 0.15,
+    "test": 0.15
+  },
+  "achieved_row_fractions": {
+    "train": 0.7,
+    "validation": 0.15,
+    "test": 0.15
+  },
+  "n_products_per_split": {
+    "train": 294063,
+    "test": 18767,
+    "validation": 18762
+  },
+  "rating_band": {
+    "thresholds": {
+      "rate_min": 0.0,
+      "rate_max": 5.0,
+      "low_max": 2.5,
+      "high_min": 4.0
+    },
+    "encoding": {
+      "low": 0,
+      "medium": 1,
+      "high": 2
+    },
+    "variant": "B (rate=0 → NULL)"
+  },
+  "label_map": {
+    "recommended": "recommended",
+    "not_recommended": "not_recommended",
+    "no_idea": "no_idea",
+    "nan": null
+  },
+  "normalization": "see src/text_norm.py (ي/ك/ى→ی/ک/ی, digits→ASCII, tags/URLs removed, ZWNJ kept, other zero-width removed, letter repeats>=3→2, whitespace collapsed, emojis kept, no stopword/negation removal). Output `body` columns are normalized text.",
+  "exclusions": {
+    "n_total": 6156289,
+    "id_missing": 0,
+    "product_id_missing": 0,
+    "body_empty": 0,
+    "duplicate_id_extra_rows": 3229,
+    "rate_missing": 0,
+    "rate_non_numeric": 0,
+    "rate_out_of_range": 1,
+    "n_valid_rows": 6153060,
+    "empty_after_normalization": 215,
+    "duplicate_id_policy": "keep first by (hash(body), product_id)",
+    "note": "reason counts may overlap; rows with invalid rate keep rating_band=NULL"
+  },
+  "split_stats": [
+    {
+      "split": "test",
+      "rows": 922928,
+      "usable_rows": 917785,
+      "recommended": 624094,
+      "not_recommended": 75675,
+      "no_idea": 89054,
+      "label_missing": 134105,
+      "band_low": 84416,
+      "band_medium": 158774,
+      "band_high": 600384,
+      "band_missing": 79354
+    },
+    {
+      "split": "validation",
+      "rows": 922927,
+      "usable_rows": 917793,
+      "recommended": 624094,
+      "not_recommended": 75675,
+      "no_idea": 89054,
+      "label_missing": 134104,
+      "band_low": 84416,
+      "band_medium": 158774,
+      "band_high": 600384,
+      "band_missing": 79353
+    },
+    {
+      "split": "train",
+      "rows": 4306990,
+      "usable_rows": 4291910,
+      "recommended": 2912438,
+      "not_recommended": 353151,
+      "no_idea": 415585,
+      "label_missing": 625816,
+      "band_low": 393941,
+      "band_medium": 740945,
+      "band_high": 2801794,
+      "band_missing": 370310
+    }
+  ],
+  "masking": {
+    "rule": "per recommendation class in train: sort by (stable_hash(id), id), mask floor(MASK_RATE*count)",
+    "per_class": {
+      "no_idea": {
+        "labeled_train_rows": 415585,
+        "masked": 83117,
+        "kept_supervised": 332468
+      },
+      "not_recommended": {
+        "labeled_train_rows": 353151,
+        "masked": 70630,
+        "kept_supervised": 282521
+      },
+      "recommended": {
+        "labeled_train_rows": 2912438,
+        "masked": 582487,
+        "kept_supervised": 2329951
+      }
+    },
+    "total_masked": 736234
+  },
+  "files_rows": {
+    "train_supervised.csv": 3555676,
+    "train_pseudo_unlabeled.csv": 736234,
+    "natural_unlabeled.csv": 625816,
+    "validation.csv": 917793,
+    "test.csv": 917785
+  },
+  "file_notes": {
+    "train_supervised.csv": "train rows not masked with >=1 valid target; masked rows removed for BOTH heads",
+    "natural_unlabeled.csv": "train rows with missing recommendation label (id, body only)",
+    "validation.csv/test.csv": "rows with >=1 valid target; never masked"
+  }
+}
