@@ -439,3 +439,43 @@ The complete manifest is saved to both `data/processed/split_manifest.json` and 
 - `data/processed/test.csv`
 - `data/processed/split_manifest.json`
 - `reports/split_manifest.json`
+
+---
+
+## Part C — Modeling
+
+### C1. TF-IDF Feature Extraction
+
+The first step of modeling is converting the normalized Persian text into numerical features. A **TF-IDF vectorizer** was built with the following configuration:
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| `ngram_range` | `(1, 2)` | Captures both single words and bigrams (e.g., «خوب بود», «توصیه می‌کنم») |
+| `min_df` | `5` | Removes rare tokens (typos, proper nouns) that the model cannot learn from |
+| `max_features` | `400,000` | Caps vocabulary size to control memory |
+| `sublinear_tf` | `True` | Applies logarithmic TF scaling (standard for TF-IDF) |
+| `token_pattern` | `r"(?u)[\w\u200c]{2,}"` | Keeps ZWNJ (`\u200c`) as part of words, so «می‌روم» stays one token |
+| `dtype` | `float32` | Reduces memory usage |
+
+**Fit strategy:** To keep the pipeline fast, the vectorizer was fit on a **random sample of 500,000 training reviews** (with `random_state=SPLIT_SEED=2026`). The fitted vocabulary was then applied to the full train, validation, and test sets. Fitting on the full 3.5M training set would be slower and would not meaningfully change the vocabulary, since the sample already captures the frequent tokens.
+
+**Output:**
+
+| Metric | Value |
+|---|---|
+| Vocabulary size | **115,840** tokens |
+| `X_train` shape | **(3,555,676, 115,840)** |
+| `X_train` non-zero entries (`nnz`) | **53,136,203** |
+| Density | **0.013%** (highly sparse) |
+| Fit time | 45 s |
+| Total transform time | 165 s (~2.7 min) |
+
+The resulting matrix is **highly sparse**: each review contains on average ~15 non-zero tokens (53M ÷ 3.5M), consistent with the short-review finding from A4 (median 22 words). A dense representation would require ~1.6 TB; storing the matrix in sparse CSR format keeps it manageable.
+
+**Caching:** The vectorizer (`tfidf_vectorizer.joblib`) and the three sparse matrices (`X_train.npz`, `X_val.npz`, `X_test.npz`) are cached under `artifacts/tfidf/`. If these artifacts exist, the pipeline reloads them instead of recomputing, ensuring reproducibility and fast iteration.
+
+**Artifacts:**
+- `artifacts/tfidf/tfidf_vectorizer.joblib`
+- `artifacts/tfidf/X_train.npz`
+- `artifacts/tfidf/X_val.npz`
+- `artifacts/tfidf/X_test.npz`
