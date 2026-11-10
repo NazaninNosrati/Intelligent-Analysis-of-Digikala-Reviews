@@ -586,3 +586,38 @@ The final TF-IDF models were trained on the full training set with the tuned `al
 **What I will do:** Use these confusion matrices as the baseline for the error analysis in the final report. The `no_idea` → `recommended` and `medium` → `high` confusions will be specifically inspected to see whether the Transformer reduces them.
 
 **Artifacts:** `reports/fig_baseline_confusion.png`
+
+### C4. Top Features per Class
+
+The top-15 features (by coefficient magnitude) for each class reveal what the TF-IDF model learned:
+
+**Task A — Recommendation:**
+
+| Class | Top features |
+|---|---|
+| `recommended` | «عالیه», «بهترین», «خیلی خوبه», «بد نبود», «خوبیه», «بد نیست», «عاشقش», «زیبا», «حرف نداره» |
+| `not_recommended` | «افتضاح», «بدترین», «افتضاحه», «متاسفم», «راضی نیستم», «نخرید», «پشیمونم», «آشغال», «مزخرف», «تقلبی», «مرجوع» |
+| `no_idea` | «شک دارم», «نیستم», «مطمئن نیستم», «بسیار معمولی», «کاملا معمولی», «نمیدونم», «کیفیت نیست» |
+
+**Task B — Rating Band:**
+
+| Class | Top features |
+|---|---|
+| `high` | «بهترین», «بد نبود», «نازک نیست», «اذیت نمیکنه», «عاشقش», «پاره نمیشه», «خشک نمیکنه», «خراب نمیشه» |
+| `low` | «بدترین», «افتضاح», «متاسفم», «آشغال», «مزخرف», «نخرید», «فاجعه», «مرجوع» |
+| `medium` | «کاملا معمولی», «بسیار معمولی», «معمولی», «کیفیت نیست», «بالایی نداره», «نه بد», «قیمت بصرفه», «شک دارم» |
+
+**What I observed:** The learned features are semantically coherent:
+- `recommended` and `high` capture clear positive expressions («عالیه», «بهترین», «عاشقش»).
+- `not_recommended` and `low` capture clear negative expressions («افتضاح», «آشغال», «مزخرف», «تقلبی»).
+- `no_idea` and `medium` capture **ambiguous** expressions («معمولی», «شک دارم», «کیفیت نیست», «نه بد»).
+
+Notably, TF-IDF **does** capture some negation, but only as **specific bigrams**: «بد نبود» and «بد نیست» appear as top features for `recommended`, and «پاره نمیشه» / «خراب نمیشه» for `high`. This means negation is learned only when the exact bigram appears in the vocabulary — a combinational variant (e.g., «خوب نبود») would not be captured.
+
+**What it means:** The top features explain the confusion-matrix patterns:
+- **`no_idea` vs. `recommended`:** ambiguous words like «کیفیت نیست» and «معمولی» overlap with mild dissatisfaction, which the model defaults to `recommended` when uncertain.
+- **`medium` vs. `low`/`high`:** words like «قیمت بصرفه» and «نه بد» are genuinely mixed-signal and can belong to either band.
+
+**What I will do:** These top features confirm the need for a **contextual model (Transformer)**: BERT can handle negation compositionally (any combination, not just memorized bigrams) and can disambiguate mixed-signal reviews using sentence-level context.
+
+**Artifacts:** (printed in the notebook; can be exported to `reports/top_features_tfidf.txt` if desired)
