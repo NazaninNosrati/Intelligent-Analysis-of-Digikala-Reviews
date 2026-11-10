@@ -479,3 +479,110 @@ The resulting matrix is **highly sparse**: each review contains on average ~15 n
 - `artifacts/tfidf/X_train.npz`
 - `artifacts/tfidf/X_val.npz`
 - `artifacts/tfidf/X_test.npz`
+
+### C2. TF-IDF Baseline: Hyperparameter Tuning
+
+Two baselines were trained and compared to quantify the effect of increasing `max_iter` and refining the `alpha` search grid.
+
+**Original baseline (C2-a):**
+
+| Task | Best alpha (sample) | Best alpha (full train) | `max_iter` | Val Macro F1 |
+|---|---|---|---|---|
+| `recommendation` | 3e-6 | 3.06e-7 | 15 | **0.683** |
+| `rating_band` | 3e-6 | 2.75e-7 | 15 | **0.645** |
+
+**Improved baseline (C2-b):**
+
+| Task | Best alpha (sample) | Best alpha (full train) | `max_iter` | Val Macro F1 |
+|---|---|---|---|---|
+| `recommendation` | 5e-6 | 5.09e-7 | 50 | **0.6831** |
+| `rating_band` | 5e-6 | 4.58e-7 | 50 | **0.6471** |
+
+**Comparison:**
+
+| Task | Original | Improved | Δ |
+|---|---|---|---|
+| `recommendation` | 0.683 | 0.6831 | **+0.0001** |
+| `rating_band` | 0.645 | 0.6471 | **+0.0018** |
+
+**What I observed:** Increasing `max_iter` from 15 to 50 and using a finer alpha grid (1.5e-6 to 5e-6) produced **negligible improvements** (+0.0001 and +0.0018). The `ConvergenceWarning` observed during the original run was benign — SGD had effectively converged even at `max_iter=15`. The alpha curve is nearly flat between `3e-6` and `5e-6` for both tasks.
+
+**What it means:** The TF-IDF + SGD pipeline has reached its **ceiling** at ~0.68 (recommendation) and ~0.65 (rating_band). The bottleneck is not the optimizer settings but the **TF-IDF representation itself**, which cannot capture word order, negation, or context — limitations that are particularly harmful given the short reviews (34% under 20 chars) and the label noise (75k conflicting labels, 36% duplicate bodies) identified in Part A.
+
+**What I will do:** Use the **improved baseline** for comparison with the Transformer model, since it represents the strongest classical baseline. The original baseline is reported for transparency and to document the effect of the hyperparameter change.
+
+### C3. TF-IDF Baseline — Final Evaluation on Test
+
+The final TF-IDF models were trained on the full training set with the tuned `alpha` and evaluated on validation and test.
+
+**Task A — Recommendation:**
+
+| Metric | Value |
+|---|---|
+| **Macro F1** | **0.699** |
+| Accuracy | 0.853 |
+| Balanced Accuracy | 0.720 |
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| `recommended` | 0.943 | 0.918 | **0.930** | 624,094 |
+| `not_recommended` | 0.658 | 0.787 | **0.717** | 75,675 |
+| `no_idea` | 0.445 | 0.455 | **0.450** | 89,054 |
+
+**Task B — Rating Band:**
+
+| Metric | Value |
+|---|---|
+| **Macro F1** | **0.658** |
+| Accuracy | 0.782 |
+| Balanced Accuracy | 0.671 |
+| **Ordinal Distance Error** | **0.245** |
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| `low` | 0.615 | 0.755 | **0.678** | 84,416 |
+| `medium` | 0.489 | 0.360 | **0.415** | 158,774 |
+| `high` | 0.864 | 0.897 | **0.881** | 600,384 |
+
+**What I observed:** Test results are **slightly better than validation** (Macro F1: 0.699 vs. 0.683 for recommendation; 0.658 vs. 0.647 for rating_band), indicating the model is **not overfitting** and benefits from full-train training. The dominant class `recommended` achieves F1 = 0.930, while `no_idea` is the weakest (F1 = 0.450). For `rating_band`, `high` is strong (F1 = 0.881) but `medium` is weak (F1 = 0.415). The ordinal distance error is low (0.245), meaning errors are mostly between adjacent bands, not distant ones.
+
+**What it means:** The TF-IDF baseline performs well on the dominant classes but struggles on ambiguous or minority classes:
+- `no_idea` is inherently ambiguous (e.g., «معمولی», «مطمئن نیستم») and overlaps with both `recommended` and `not_recommended`.
+- `medium` has artificial boundaries (2.5–4.0) and is affected by the 119k conflicting-rate rows identified in A5.
+- The gap between Accuracy (0.853) and Macro F1 (0.699) is expected under class imbalance: the model is excellent on the majority class but weaker on the two minority classes.
+
+**What I will do:** Use these results as the classical baseline for comparison with the Transformer model. The Transformer is expected to improve on the minority classes by capturing word order, negation, and context — which TF-IDF cannot. The confusion matrices and top features will inform the error analysis in the final report.
+
+**Artifacts:**
+- `reports/preds_tfidf_recommendation_validation.parquet`
+- `reports/baseline_metrics.json`
+- `reports/fig_baseline_confusion.png`
+- `artifacts/tfidf/logreg_recommendation.joblib`
+- `artifacts/tfidf/logreg_rating_band.joblib`
+
+**Confusion matrices (row-normalized) — Figure C3:**
+
+**Task A — Recommendation:**
+| true ↓ / pred → | `recommended` | `not_recommended` | `no_idea` |
+|---|---|---|---|
+| `recommended` | **0.92** | 0.02 | 0.06 |
+| `not_recommended` | 0.07 | **0.79** | 0.14 |
+| `no_idea` | **0.33** | 0.22 | **0.46** |
+
+**Task B — Rating Band:**
+| true ↓ / pred → | `low` | `medium` | `high` |
+|---|---|---|---|
+| `low` | **0.75** | 0.14 | 0.11 |
+| `medium` | 0.17 | **0.36** | **0.47** |
+| `high` | 0.02 | 0.08 | **0.90** |
+
+**What I observed:** Both tasks exhibit the same failure pattern: the model **defaults to the dominant class when uncertain**.
+- **`no_idea`:** 33% is misclassified as `recommended` (the majority class); only 46% is correctly predicted.
+- **`medium`:** 47% is misclassified as `high` (the majority band); only 36% is correctly predicted.
+- In contrast, the dominant classes are well captured: `recommended` (92%) and `high` (90%).
+
+**What it means:** The confusion matrices reveal the **ceiling of the TF-IDF representation**: it cannot separate ambiguous minority classes (`no_idea`, `medium`) from the dominant ones, because it lacks word-order, negation, and contextual information. `class_weight="balanced"` reweights the loss, but it cannot fix the representation itself. This is the strongest empirical evidence that a contextual model (Transformer) is needed.
+
+**What I will do:** Use these confusion matrices as the baseline for the error analysis in the final report. The `no_idea` → `recommended` and `medium` → `high` confusions will be specifically inspected to see whether the Transformer reduces them.
+
+**Artifacts:** `reports/fig_baseline_confusion.png`
