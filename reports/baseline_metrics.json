@@ -1,9 +1,9 @@
 {
-  "best_alpha_full": {
+  "final_alpha": {
     "recommendation": 5.093482379946621e-07,
     "rating_band": 4.584831299604055e-07
   },
-  "tuning_grid": [
+  "tuning_sample_alpha_grid": [
     3e-07,
     1e-06,
     3e-06,

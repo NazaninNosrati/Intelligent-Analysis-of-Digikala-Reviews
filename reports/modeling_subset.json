@@ -1,0 +1,40 @@
+{
+  "train_sub": {
+    "rows": 354599,
+    "recommendation": {
+      "recommended": 232519,
+      "NaN": 61208,
+      "no_idea": 32839,
+      "not_recommended": 28033
+    },
+    "rating_band": {
+      "high": 233479,
+      "medium": 60461,
+      "low": 32290,
+      "NaN": 28369
+    }
+  },
+  "val_sub": {
+    "rows": 92164,
+    "recommendation": {
+      "recommended": 62538,
+      "NaN": 13079,
+      "no_idea": 8958,
+      "not_recommended": 7589
+    },
+    "rating_band": {
+      "high": 60182,
+      "medium": 16165,
+      "low": 8448,
+      "NaN": 7369
+    }
+  },
+  "pseudo_sub": {
+    "rows": 74090
+  },
+  "rule": "sha256(f'{SPLIT_SEED}|modeling-subset|{id}') mod 1000 < per_mille",
+  "per_mille": {
+    "train": 100,
+    "val": 100
+  }
+}

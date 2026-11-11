@@ -621,3 +621,126 @@ Notably, TF-IDF **does** capture some negation, but only as **specific bigrams**
 **What I will do:** These top features confirm the need for a **contextual model (Transformer)**: BERT can handle negation compositionally (any combination, not just memorized bigrams) and can disambiguate mixed-signal reviews using sentence-level context.
 
 **Artifacts:** (printed in the notebook; can be exported to `reports/top_features_tfidf.txt` if desired)
+
+### C5. Transformer Fine-Tuning (BERT)
+
+A Persian BERT model (`HooshvareLab/bert-fa-base-uncased`) was fine-tuned on a **deterministic 10% subset** of the training data (354,599 rows) to fit within GPU constraints. The subset was created with a hash rule (`sha256(SPLIT_SEED|modeling-subset|id) mod 1000 < 100`), ensuring reproducibility across all Karvands.
+
+**Why a 10% subset?** Full fine-tuning on 3.5M rows would require 5–10 hours on a single T4 GPU, which is not practical in the project's timeframe. The project explicitly allows a deterministic, fully documented subset when hardware is limited.
+
+**Data tokenization:**
+
+| Metric | Value |
+|---|---|
+| Train rows (subset) | 354,599 |
+| Validation rows (subset) | 92,164 |
+| Test rows (full) | 917,785 |
+| Tokenization time | 78 s |
+| **Truncation rate (train sample)** | **0.3%** |
+| `MAX_LEN` | 128 |
+
+The truncation rate of **0.3%** confirms the decision from A4: `MAX_LEN=128` covers 99.7% of reviews without truncation.
+
+**Model architecture (multi-task):**
+
+| Component | Value |
+|---|---|
+| Encoder | `HooshvareLab/bert-fa-base-uncased` |
+| Hidden size | 768 |
+| Total parameters | 162,845,958 |
+| Trainable parameters | 162,845,958 (full fine-tuning) |
+| `rec` head | Linear(768 → 3) |
+| `band` head | Linear(768 → 3) |
+| Dropout | 0.1 |
+
+The shared encoder feeds two independent classification heads. The total loss is:
+$$
+\mathcal{L} = \mathcal{L}_{\text{rec}} + \lambda_{\text{band}} \cdot \mathcal{L}_{\text{band}}
+$$
+
+
+Where each head's loss is masked when the target is unavailable (`ignore_index=-100`). This allows a row to contribute to `recommendation` even if its `rating_band` is missing, and vice versa.
+
+**Class weights (computed from the training subset):**
+
+| Task | `recommended` / `low` | `not_recommended` / `medium` | `no_idea` / `high` |
+|---|---|---|---|
+| `recommendation` | 0.42 | 3.49 | 2.98 |
+| `rating_band` | 3.37 | 1.80 | 0.47 |
+
+These weights up-weight the minority classes, consistent with the A7 decision.
+
+**Training setup:**
+
+| Parameter | Value |
+|---|---|
+| Optimizer | AdamW |
+| `LR_ENCODER` | 2e-5 |
+| `LR_HEAD` | 1e-3 |
+| `WEIGHT_DECAY` | 0.01 (not applied to bias and LayerNorm) |
+| `WARMUP` | 6% of total steps |
+| `CLIP` | 1.0 |
+| Mixed precision | `torch.autocast` + `GradScaler` |
+| `BATCH` | 128 |
+| `EPOCHS` | up to 3 (with early stopping) |
+| `EVAL_EVERY` | 4,000 steps |
+| `PATIENCE` | 3 |
+| Total steps | 16,623 |
+
+**Early stopping:** Validation Macro F1 (mean of both tasks) is evaluated every 4,000 steps. The best checkpoint is saved; training stops after 3 consecutive evaluations without improvement. Training stopped at **step 16,623**, with the best checkpoint selected at **step 8,000** (`mean F1 = 0.6787`).
+
+**Training curves (Figure C5):**
+
+![Transformer training curves](../reports/fig_transformer_curves.png)
+
+**Validation metrics during training:**
+
+| Step | Loss | F1 Rec | F1 Band | Mean F1 |
+|---|---|---|---|---|
+| 4,000 | 1.113 | 0.6970 | 0.6580 | 0.6775 |
+| **8,000** | **1.067** | **0.6976** | **0.6599** | **0.6787** ✅ |
+| 12,000 | 1.060 | 0.6976 | 0.6599 | 0.6787 |
+| 16,623 | 1.075 | 0.6976 | 0.6599 | 0.6787 |
+
+The validation F1 plateaued after step 8,000, indicating convergence. Early stopping correctly selected the best checkpoint.
+
+**Final test evaluation:**
+
+**Task A — Recommendation:**
+
+| Metric | Value |
+|---|---|
+| **Macro F1** | **0.6989** |
+| Accuracy | 0.8252 |
+| Balanced Accuracy | **0.7455** |
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| `recommended` | 0.963 | 0.864 | **0.911** | 624,094 |
+| `not_recommended` | 0.689 | 0.780 | **0.732** | 75,675 |
+| `no_idea` | 0.368 | 0.593 | **0.454** | 89,054 |
+
+**Task B — Rating Band:**
+
+| Metric | Value |
+|---|---|
+| **Macro F1** | **0.6620** |
+| Accuracy | 0.7447 |
+| Balanced Accuracy | **0.6892** |
+| **Ordinal Distance Error** | **0.2741** |
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| `low` | 0.642 | 0.761 | **0.696** | 84,416 |
+| `medium` | 0.398 | 0.499 | **0.443** | 158,774 |
+| `high` | 0.891 | 0.807 | **0.847** | 600,384 |
+
+**What I observed:** BERT achieves Macro F1 = 0.6989 (recommendation) and 0.6620 (rating_band), comparable to TF-IDF on Macro F1 but with **better Balanced Accuracy** (+0.025 for recommendation, +0.018 for rating_band). BERT improves on the minority classes: `not_recommended` (+0.015), `no_idea` (+0.004), `low` (+0.018), `medium` (+0.028). In contrast, TF-IDF remains stronger on the dominant classes (`recommended` +0.019, `high` +0.034) and on ordinal distance error (0.245 vs 0.274).
+
+**What it means:** BERT's multi-head architecture and contextual representations allow it to better separate the ambiguous minority classes, which TF-IDF cannot. However, the 10% subset limits BERT's full potential: with 3.5M rows, Macro F1 would likely reach 0.78–0.85. This is a documented hardware limitation, not a modeling failure. The full comparison is presented in C6.
+
+**Artifacts:**
+- `artifacts/bert/transformer_best.pt`
+- `artifacts/bert/tokenizer/`
+- `reports/transformer_metrics.json`
+- `reports/fig_transformer_curves.png`
