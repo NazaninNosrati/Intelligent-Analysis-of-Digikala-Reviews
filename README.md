@@ -843,3 +843,23 @@ As required by the project, the pseudo-labels were audited against the public re
 **What I will do:** Report the audit as evidence that the negative semi-supervised result is **not** a threshold bug but a **calibration asymmetry** of the base model combined with the natural class skew of the unlabeled pool.
 
 **Artifacts:** `reports/semi_metrics.json`
+
+### C7. Statistical Comparison (Bootstrap, 95% CI)
+
+To determine whether the observed differences are statistically meaningful, a paired bootstrap test (B=1000, seed=2026) was performed on the test predictions. The mean difference and 95% confidence interval are reported for each comparison.
+
+| Comparison | Head | Mean Δ | 95% CI | Significant? | Winner |
+|---|---|---|---|---|---|
+| Semi vs Control | `recommendation` | +0.0002 | [−0.0007, +0.0011] | ❌ No (CI includes 0) | ≈ Tie |
+| Control vs TF-IDF | `recommendation` | +0.0062 | [+0.0049, +0.0074] | ✅ Yes | **BERT (Control)** |
+| Semi vs Control | `rating_band` | −0.0012 | [−0.0018, −0.0005] | ✅ Yes (negative) | **Control** |
+| Control vs TF-IDF | `rating_band` | +0.0108 | [+0.0098, +0.0118] | ✅ Yes | **BERT (Control)** |
+
+**What I observed:**
+1. **BERT (Control) significantly outperforms TF-IDF on both heads** (+0.0062 for `recommendation`, +0.0108 for `rating_band`), with confidence intervals entirely above zero. This confirms that the Transformer's contextual representations are genuinely better than TF-IDF, even under the same training budget.
+2. **Semi-supervised training does not significantly improve over Control** for `recommendation` (+0.0002, CI includes zero), and is **significantly worse** for `rating_band` (−0.0012, CI entirely below zero). This confirms the pseudo-labeling result from C6: with the fixed 0.90 threshold, pseudo-labels reinforce the majority class and do not help.
+3. **The largest and most robust gain comes from the Transformer itself, not from semi-supervision.** The BERT encoder contributes +0.0062 (recommendation) and +0.0108 (rating_band), while pseudo-labeling adds essentially nothing on top.
+
+**What it means:** The statistical analysis strengthens the conclusions from C6. The main improvement over the TF-IDF baseline comes from switching to a contextual model (BERT), not from pseudo-labeling. The semi-supervised experiment, while negative, is informative: it shows that pseudo-labeling is not a free win — it depends on the calibration of the base model and the class distribution of the unlabeled pool. With a more balanced pseudo-label set (e.g., per-class threshold or a larger pool), the result might differ, but that is outside the project's fixed protocol.
+
+**Artifacts:** `reports/bootstrap_comparison.csv`
