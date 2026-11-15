@@ -863,3 +863,100 @@ To determine whether the observed differences are statistically meaningful, a pa
 **What it means:** The statistical analysis strengthens the conclusions from C6. The main improvement over the TF-IDF baseline comes from switching to a contextual model (BERT), not from pseudo-labeling. The semi-supervised experiment, while negative, is informative: it shows that pseudo-labeling is not a free win — it depends on the calibration of the base model and the class distribution of the unlabeled pool. With a more balanced pseudo-label set (e.g., per-class threshold or a larger pool), the result might differ, but that is outside the project's fixed protocol.
 
 **Artifacts:** `reports/bootstrap_comparison.csv`
+
+### C8. Error Analysis
+
+A manual analysis of the error candidates was performed on the test set. Two candidate pools were generated:
+- `reports/error_analysis_candidates.csv` — recommendation errors (39 rows)
+- `reports/error_analysis_candidates_band.csv` — rating_band errors (16 rows)
+
+Candidates were stratified into groups to cover the project's required categories: label noise, mixed opinions, short text, negation, spelling variation, duplicated text, contradictory labels, boundary cases, and model disagreements.
+
+#### C8-a. Recommendation Errors
+
+**Group distribution:**
+
+| Group | Count | Description |
+|---|---|---|
+| `both_wrong` | 10 | Both TF-IDF and Transformer wrong |
+| `tfidf_right_transformer_wrong` | 6 | TF-IDF correct, Transformer wrong |
+| `transformer_right_tfidf_wrong` | 6 | Transformer correct, TF-IDF wrong |
+| `confident_wrong` | 5 | Transformer confident (≥ 0.90) but wrong |
+| `negation_wrong` | 4 | Errors involving negation |
+| `mixed_wrong` | 4 | Errors involving mixed opinions |
+| `short_wrong` | 4 | Errors involving short text |
+
+**Manual category distribution (overlapping):**
+
+| Category | Count | Representative example |
+|---|---|---|
+| `mixed_opinion` | 12 | «جنسش خوبه ولی روی قالی خوب نمی‌ایسته» (label: `not_recommended`) |
+| `disagreement` | 11 | «مدادا خوبن اصلا سخت نیستن» (TF-IDF: `low`, BERT: `high`) |
+| `short_text` | 9 | «معمولی بود», «خوب بود» |
+| `label_noise` | 8 | «بسیار عالی» (1,304 duplicates with conflicting labels) |
+| `negation` | 6 | «بد نیست», «اصلا سخت نیستن» |
+| `implicit_sentiment` | 4 | «تازه کمی نخ کش شد» («تازه» = «فقط») |
+| `spelling_variation` | 1 | «بزور ی وجب میش» |
+| `no_experience` | 1 | «هنوز نخوندمش» |
+| `aspect_mismatch` | 1 | «قیمت و بسته‌بندی مناسب...» (review about the seller, not the product) |
+
+#### C8-b. Rating-Band Errors
+
+**Group distribution:**
+
+| Group | Count | Description |
+|---|---|---|
+| `band_adjacent_error` | 5 | Off by one band (`low`↔`medium`, `medium`↔`high`) |
+| `band_far_error` | 4 | Off by two bands (`low`↔`high`) |
+| `tfidf_right_transformer_wrong` | 3 | TF-IDF correct, Transformer wrong |
+| `transformer_right_tfidf_wrong` | 3 | Transformer correct, TF-IDF wrong |
+
+**Manual category distribution (overlapping):**
+
+| Category | Count | Representative example |
+|---|---|---|
+| `boundary` | 10 | `rate=2.2` (close to 2.5), `rate=4.0` (high boundary) |
+| `disagreement` | 5 | «مدادا خوبن اصلا سخت نیستن» (TF-IDF: `low`, BERT: `high`) |
+| `text_rate_mismatch` | 3 | «قیمت مناسب و خوبه» (rate=3.0, but text is unambiguously positive) |
+| `mixed_opinion` | 3 | «بوی عالی ولی ماندگاری صفر» (rate=4.0) |
+| `negation` | 3 | «جنسش بد ک نیست» (rate=2.2) |
+| `no_experience` | 2 | «هنوز نخوندم» (rate=4.0) |
+| `short_text` | 3 | «خوب بود» (rate=2.0) |
+| `implicit_sentiment` | 1 | «گارد باید همراه ساعت...» (rate=4.0) |
+
+#### C8-c. Key Findings
+
+**1. Label noise is a major source of irreducible error.**
+The comment «بسیار عالی» appears **1,304 times** with conflicting `recommendation_status` labels. «بد نیست» appears 1,366 times with conflicting labels, «معمولی بود» 611 times, and «خوبه بد نیس» 135 times. No model can resolve these from text alone — this is a data-quality issue, not a modeling failure. This explains a substantial fraction of the `confident_wrong` cases (Transformer confident ≥ 0.90, but wrong).
+
+**2. Mixed opinions are systematically misclassified.**
+Models tend to average positive and negative clauses, but the labels follow the clause after «ولی» / «اما». Examples:
+- «جنسش خوبه ولی روی قالی خوب نمی‌ایسته» → `not_recommended`
+- «دو تا تیشرت... یکی خوب، یکی افتضاح» → `no_idea`
+- «گیم‌پلی بی‌نظیره اما کیفیت چاپ خوب نیست» → `recommended` (Transformer over-weights the positive clause)
+
+**3. Rating-band boundaries are artificial.**
+«قیمت مناسب و خوبه» has `rate=3.0` (`medium`), but the text is unambiguously positive. The 2.5–4.0 boundary is not reflected in the text, which limits the achievable F1 for `medium`. The same applies to `rate=2.2` (close to the 2.5 boundary) and `rate=4.0` (the high boundary).
+
+**4. Negation is where BERT beats TF-IDF.**
+«مدادا خوبن اصلا سخت نیستن» is labeled `high` (`rate=5`). TF-IDF sees «سخت» (hard) and predicts `low`; BERT parses «اصلا ... نیستن» and predicts `high`. This is the clearest example of the contextual advantage documented in C4. The same pattern appears in «بد نیست» and «چسبندگی نداره».
+
+**5. The two models fail differently.**
+- **TF-IDF** fails on negation and mixed opinions (where context matters) — it is a bag-of-words model and cannot parse sentence structure.
+- **BERT** fails on very short, sentiment-free texts (where it has too little signal, e.g. «مگنت داره», «بیرون 75تومنه») and on contradictory labels (where no model can win).
+- This complementarity suggests that an **ensemble** of the two models could outperform either one alone. This is left as an optional extension.
+
+**6. A significant fraction of errors involve no experience with the product.**
+«هنوز نخوندمش ولی بسته‌بندیش خوب بود» and «فعلا استفاده نکرده‌ام وای امیدوارم که خوب باشد» are labeled `no_idea` or `high`, but the user explicitly has no experience with the product. This is another form of label noise: the rating and the recommendation are not grounded in actual usage.
+
+#### C8-d. Implications for the Report
+
+The error analysis confirms the ceiling analysis from C5 and C6:
+- The remaining errors are concentrated in **ambiguous minority classes** (`no_idea`, `medium`), **label noise** (1,304 duplicates of «بسیار عالی»), and **mixed opinions** (the clause after «ولی» is decisive but the models average the clauses).
+- The error profile is consistent across TF-IDF and BERT: both struggle with the same categories, but BERT has a slight edge on negation and mixed opinions, while TF-IDF has a slight edge on very short texts.
+- The analysis also suggests a concrete improvement: **an ensemble of TF-IDF and BERT**, or a **clause-level attention mechanism** that gives more weight to the clause after «ولی» / «اما».
+
+**Artifacts:**
+- `reports/error_analysis_candidates.csv`
+- `reports/error_analysis_candidates_band.csv`
+- `reports/error_analysis_final.md` (manually annotated)
