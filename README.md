@@ -744,3 +744,102 @@ The validation F1 plateaued after step 8,000, indicating convergence. Early stop
 - `artifacts/bert/tokenizer/`
 - `reports/transformer_metrics.json`
 - `reports/fig_transformer_curves.png`
+
+### C6. Semi-Supervised Experiment (Pseudo-Labeling)
+
+The semi-supervised experiment tests whether pseudo-labels can improve the fine-tuned Transformer. The protocol follows the project specification exactly: the `recommendation_status` head is targeted, the confidence threshold is fixed at **0.90**, and the `rating_band` head is masked for pseudo-labeled rows.
+
+**Step 1 — Supervised source model:** The fine-tuned Transformer from C5 (selected at step 8,000) is used as the source model for pseudo-label predictions.
+
+**Step 2 — Pseudo-label selection:**
+
+| Metric | Value |
+|---|---|
+| Unlabeled pool size | 74,090 |
+| Accepted (confidence ≥ 0.90) | **35,496 (47.91%)** |
+| Rejected | 38,594 (52.09%) |
+
+| Class | Predicted (all) | Accepted | Acceptance rate |
+|---|---|---|---|
+| `recommended` | 53,473 | 32,976 | **61.67%** |
+| `not_recommended` | 8,732 | 2,481 | 28.41% |
+| `no_idea` | 11,885 | **39** | **0.33%** |
+
+**Step 3 — Semi-supervised training:** A second copy of the supervised model is fine-tuned on `train_supervised` + the accepted pseudo-labeled rows. The pseudo-labels are used **only** for the `recommendation_status` loss; the `rating_band` loss is masked (`ignore_index = -100`) for these rows, as required by the project.
+
+**Step 4 — Control model:** To isolate the effect of pseudo-labeling from the effect of additional training, a control model is fine-tuned on `train_supervised` alone, for the **same number of steps** (6,096). This is the critical comparison.
+
+**Results — Test set comparison:**
+
+| Head | Metric | Supervised | Control | Semi | Semi − Sup | Semi − Control |
+|---|---|---|---|---|---|---|
+| `recommendation` | Macro F1 | 0.6954 | 0.7053 | **0.7056** | +0.0102 | **+0.0002** |
+| `recommendation` | Accuracy | 0.8312 | **0.8391** | 0.8307 | −0.0005 | −0.0084 |
+| `recommendation` | Balanced Acc | 0.7411 | 0.7417 | **0.7457** | +0.0047 | +0.0040 |
+| `rating_band` | Macro F1 | 0.6665 | **0.6686** | 0.6675 | +0.0010 | **−0.0012** |
+| `rating_band` | Balanced Acc | 0.6849 | 0.6858 | **0.6917** | +0.0068 | +0.0059 |
+| `rating_band` | Ordinal Error | 0.2621 | **0.2560** | 0.2654 | +0.0033 | +0.0094 |
+
+**Per-class F1 — Recommendation:**
+
+| Class | Supervised | Control | Semi |
+|---|---|---|---|
+| `recommended` | 0.915 | **0.921** | 0.914 |
+| `not_recommended` | 0.720 | 0.729 | **0.730** |
+| `no_idea` | 0.450 | 0.466 | **0.472** |
+
+**Per-class F1 — Rating Band:**
+
+| Class | Supervised | Control | Semi |
+|---|---|---|---|
+| `low` | 0.693 | 0.695 | **0.698** |
+| `medium` | **0.449** | 0.447 | **0.450** |
+| `high` | 0.858 | **0.863** | 0.854 |
+
+**What I observed:**
+1. **Pseudo-labeling produced a negligible gain over the Control model**: +0.0002 for `recommendation` and −0.0012 for `rating_band`. Since the control model was trained for the same number of steps without pseudo-labels, this isolates the effect of pseudo-labeling itself.
+2. **The apparent gain over Supervised (+0.0102 for `recommendation`) is mostly from continued training, not from pseudo-labels**: the control model already achieves +0.0099 over Supervised. In other words, simply fine-tuning longer helps; adding pseudo-labels adds almost nothing on top of that.
+3. **Semi-supervised slightly improves minority classes** (`no_idea` +0.006, `not_recommended` +0.001, `medium` +0.003) **but degrades the dominant classes** (`recommended` −0.007, `high` −0.009). This mirrors the pseudo-label distribution: 92.9% of accepted pseudo-labels are `recommended`, so the model sees many near-duplicate majority examples and drifts toward the majority class.
+
+**What it means:** With the fixed 0.90 threshold and this 10% subset, pseudo-labeling does not improve the Transformer. The root cause is the **confidence asymmetry** of the supervised model: it is overconfident on `recommended` (61.7% acceptance) and underconfident on `no_idea` (0.3% acceptance). The threshold therefore harvests a heavily skewed pseudo-label set that reinforces the existing class imbalance instead of correcting it.
+
+**Why this is still a valid scientific result:** The experiment follows the project protocol exactly (fixed threshold 0.90, same split, same architecture, same training budget), and the comparison includes a proper control model. The negative result is informative: pseudo-labeling is not a free win — it depends on the calibration of the base model. A class-balanced or per-class threshold, or a larger unlabeled pool with more minority-class examples, would be needed to see a real gain.
+
+**Artifacts:**
+- `artifacts/bert/semi_best.pt`
+- `artifacts/bert/control_best.pt`
+- `reports/preds_semi_*.parquet`
+- `reports/preds_control_*.parquet`
+- `reports/semi_comparison.csv`
+
+### C6-b. Pseudo-Label Quality Audit
+
+As required by the project, the pseudo-labels were audited against the public reference labels **after** pseudo-label selection and training. The reference labels were **not** used to select pseudo-labels, train the model, or tune the threshold.
+
+| Metric | Value |
+|---|---|
+| **Accuracy of accepted pseudo-labels** | **98.01%** |
+| **Accuracy of rejected pseudo-labels** | **68.95%** |
+| Per-class precision (accepted) — `recommended` | 98.67% |
+| Per-class precision (accepted) — `not_recommended` | 89.64% |
+| Per-class precision (accepted) — `no_idea` | 71.79% |
+
+**Reference distribution (ground truth):**
+
+| Class | Pool (all) | Accepted |
+|---|---|---|
+| `recommended` | 58,641 (79.1%) | 32,620 (91.9%) |
+| `no_idea` | 8,406 (11.3%) | 589 (1.7%) |
+| `not_recommended` | 7,043 (9.5%) | 2,287 (6.4%) |
+
+**What I observed:**
+1. **The 0.90 threshold was highly precise**: 98.01% of accepted pseudo-labels match the reference labels. When the model says "confident", it is almost always correct.
+2. **The threshold was also very conservative**: 68.95% of rejected pseudo-labels are actually correct. About ~26,600 correct labels were discarded because their confidence fell below 0.90.
+3. **`no_idea` is problematic even among accepted pseudo-labels**: only 71.79% precision, compared with 98.67% for `recommended` and 89.64% for `not_recommended`. The model is overconfident about `no_idea` when it is wrong.
+4. **The reference distribution itself is skewed**: 79.1% of the unlabeled pool is truly `recommended`. The accepted subset is 91.9% `recommended`, so the skew in pseudo-labels reflects the underlying data distribution, not just the threshold.
+
+**What it means:** The audit explains the negative semi-supervised result from C6. The threshold successfully filtered low-confidence predictions (98% precision), but it also discarded ~27k correct predictions (69% of rejected rows were correct). The accepted pseudo-label set was dominated by `recommended` because (a) the model was overconfident on `recommended` and (b) the underlying pool is itself 79% `recommended`. `no_idea` was almost never accepted (1.7% of the accepted set) and, when accepted, was only 72% precise — so pseudo-labeling could not improve this class.
+
+**What I will do:** Report the audit as evidence that the negative semi-supervised result is **not** a threshold bug but a **calibration asymmetry** of the base model combined with the natural class skew of the unlabeled pool.
+
+**Artifacts:** `reports/semi_metrics.json`
