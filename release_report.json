@@ -1,0 +1,108 @@
+{
+  "project": "Intelligent Analysis of Digikala Reviews",
+  "phase": "1 (required)",
+  "dataset": {
+    "total_records": 6156289,
+    "unique_products": 331599,
+    "unique_sellers": 29214,
+    "final_normalized_rows": 6152845
+  },
+  "data_split": {
+    "strategy": "product-grouped, 70/15/15",
+    "train_rows": 4306990,
+    "validation_rows": 922927,
+    "test_rows": 922928,
+    "seeds": {
+      "SPLIT_SEED": 2026,
+      "MASK_SEED": "digikala-semi-supervised-v1",
+      "MASK_RATE": 0.20
+    }
+  },
+  "models": {
+    "tfidf_baseline": {
+      "recommendation_macro_f1": 0.699,
+      "rating_band_macro_f1": 0.658,
+      "recommendation_accuracy": 0.853,
+      "rating_band_accuracy": 0.782,
+      "rating_band_ordinal_error": 0.245
+    },
+    "bert_supervised": {
+      "model": "HooshvareLab/bert-fa-base-uncased",
+      "subset_rows": 354599,
+      "max_len": 128,
+      "recommendation_macro_f1": 0.6989,
+      "rating_band_macro_f1": 0.6620,
+      "recommendation_balanced_acc": 0.7455,
+      "rating_band_balanced_acc": 0.6892,
+      "rating_band_ordinal_error": 0.2741
+    },
+    "bert_control": {
+      "recommendation_macro_f1": 0.7053,
+      "rating_band_macro_f1": 0.6686
+    },
+    "bert_semi_supervised": {
+      "pseudo_label_threshold": 0.90,
+      "accepted_pseudo_labels": 35496,
+      "accepted_pct": 47.91,
+      "pseudo_label_accuracy": 0.9801,
+      "recommendation_macro_f1": 0.7056,
+      "rating_band_macro_f1": 0.6675
+    }
+  },
+  "statistical_comparison": {
+    "method": "paired bootstrap, B=1000, 95% CI",
+    "control_vs_tfidf_recommendation": {
+      "mean_delta": 0.0062,
+      "ci": [0.0049, 0.0074],
+      "significant": true
+    },
+    "control_vs_tfidf_rating_band": {
+      "mean_delta": 0.0108,
+      "ci": [0.0098, 0.0118],
+      "significant": true
+    },
+    "semi_vs_control_recommendation": {
+      "mean_delta": 0.0002,
+      "ci": [-0.0007, 0.0011],
+      "significant": false
+    },
+    "semi_vs_control_rating_band": {
+      "mean_delta": -0.0012,
+      "ci": [-0.0018, -0.0005],
+      "significant": true,
+      "note": "semi is significantly worse"
+    }
+  },
+  "error_analysis": {
+    "recommendation_errors_analyzed": 39,
+    "rating_band_errors_analyzed": 16,
+    "top_categories": {
+      "mixed_opinion": 12,
+      "disagreement": 11,
+      "short_text": 9,
+      "label_noise": 8,
+      "negation": 6,
+      "boundary": 10
+    }
+  },
+  "limitations": [
+    "Final BERT checkpoint (model.pt) could not be included due to Kaggle GPU quota limits and corrupted downloads.",
+    "Full fine-tuning on 3.5M rows was not feasible; a deterministic 10% subset was used.",
+    "Semi-supervised pseudo-labeling did not improve over the control model, due to class imbalance in the accepted pseudo-labels (92.9% recommended)."
+  ],
+  "reproducibility": {
+    "seeds": {
+      "SPLIT_SEED": 2026,
+      "MASK_SEED": "digikala-semi-supervised-v1",
+      "MASK_RATE": 0.20,
+      "MODEL_SEED": 2026
+    },
+    "manifest": "data/processed/split_manifest.json",
+    "notebooks": [
+      "01_descriptive_analysis.ipynb",
+      "02_baselines.ipynb",
+      "03_transfer_learning_finetuning.ipynb",
+      "04_semi_supervised.ipynb"
+    ]
+  }
+}
