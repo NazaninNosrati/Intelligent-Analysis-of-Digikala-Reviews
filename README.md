@@ -2,7 +2,7 @@
 
 ## 📌 Project Overview
 
-This project builds an intelligent system that analyzes Persian Digikala product reviews :
+This project builds an intelligent system that analyzes Persian Digikala product reviews to:
 1. Predict whether the user **recommends** the product (`recommendation_status`).
 2. Predict an ordered **rating band** (`rating_band`) derived from the numeric `rate`.
 
@@ -31,27 +31,7 @@ project-3/
 └── README.md
 ```
 
-### Distribution of `rate`: Skewness, Concentration, and Most Frequent Values
-
-| rate | count (n) | percentage (pct) | cumulative pct |
-|---|---|---|---|
-| 5.0 | 2,398,801 | 38.97% | 38.97% |
-| 4.0 | 1,515,723 | 24.62% | 63.59% |
-| 3.0 | 958,799 | 15.57% | 79.16% |
-| 0.0 | 529,098 | 8.59% | 87.75% |
-| 1.0 | 327,662 | 5.32% | 93.08% |
-| 4.8 | 7,276 | 0.12% | 98.02% |
-| 3.4 | 7,250 | 0.12% | 98.13% |
-| 3.6 | 6,975 | 0.11% | 98.25% |
-| 2.5 | 5,438 | 0.09% | 98.34% |
-
-**What I observed:** The `rate` column contains **178 unique values** ranging from 0 to 2500 (one record with value 2500 is outside the valid 0–5 range and is invalid). The distribution is heavily right-skewed: the value 5.0 with **38.97%**, 4.0 with **24.62%**, and 3.0 with **15.57%** are the most frequent values. The five most frequent values (5, 4, 3, 0, 1) together cover **93.08%** of the data, and the top 20 values cover **98.34%** — indicating a highly concentrated distribution. Notably, `rate = 0.0` accounts for **8.59%** (about 529k records), showing that a substantial portion of users gave a zero rating (not missing data). Additionally, `rate = 2.0` does not appear among the top 20 values — a pattern consistent with the "polarization of opinions" phenomenon (users are either highly satisfied or highly dissatisfied).
-
-**What it means:** The `rate` distribution is skewed and concentrated, exhibiting a J-shaped pattern (a peak at 5, a steep decline, and a small bump at 0 and 1). With the project thresholds, the derived `rating_band` is expected to be relatively imbalanced (with the `high` band dominant).
-
-**What I will do:** For `rating_band`, I will use class weighting and ordinal distance error. I will remove the record with `rate = 2500` as invalid data.
-
-## Part A — Descriptive Analysis:
+## Part A — Descriptive Analysis
 
 ### A1. Dataset Size and Structure
 
@@ -74,7 +54,7 @@ project-3/
 
 **Decision:** A product-grouped split is required to prevent the model from memorizing product-specific patterns. See A5 for the updated justification.
 
-**Artifacts:** (../reports/fig1_comments_per_product.png)
+**Artifacts:** `reports/fig1_comments_per_product.png`
 
 ### A2. Missing-Value Patterns
 
@@ -92,7 +72,7 @@ project-3/
 | `body` | 637 | 0.01% |
 | `rate`, `created_at`, `id`, `is_buyer`, `product_id`, `likes`, `dislikes` | 0 | 0.00% |
 
-The core input column `body` has only **637 missing values (0.01%)**. Columns such as `id`, `created_at`, `rate`, `is_buyer`, `product_id`, `likes`, and `dislikes` have **zero missing values** because they are either system-generated (`id`, `created_at`, `product_id`, `is_buyer`), mandatory for review submission (`rate`), or have a default value of 0 (`likes`, `dislikes`). In contrast, columns with high missing rates (`title`, `advantages`, `disadvantages`, `true_to_size_rate`) are **optional** fields that users frequently skip.
+The core input column `body` has only **637 missing values (0.01%)**. Columns such as `id`, `created_at`, `rate`, `is_buyer`, `product_id`, `likes`, and `dislikes` have **zero missing values** because they are either system-generated (`id`, `created_at`, `product_id`, `is_buyer`), mandatory for review submission (`rate`), or have a default value of 0 (`likes`, `dislikes`).
 
 **Structural analysis of missing labels:** The cross-tabulation of `label_missing × is_buyer` reveals a fully structural pattern:
 
@@ -106,21 +86,20 @@ The core input column `body` has only **637 missing values (0.01%)**. Columns su
 - Among buyers, **5,261,863 (89.9%) have labels** and **592,245 (10.1%) do not**.
 - There is **no row** with `label_missing=False` and `is_buyer=False`.
 
-Additionally, rows with missing labels have a **higher mean rate (4.04 vs 3.58)**, although the median is identical (4.0), suggesting that unlabeled users skew toward higher ratings.
+Additionally, rows with missing labels have a **higher mean rate (4.04 vs 3.58)**, although the median is identical (4.0).
 
-**What it means:** Missing labels are structurally biased: non-buyers never provide a recommendation label, and even among buyers, ~10% skip it. Users without labels tend to give slightly higher ratings. This means missingness is **not MCAR (Missing Completely At Random)** — it is structurally tied to `is_buyer` and `rate`, consistent with a **MAR (Missing At Random)** pattern.
+**What it means:** Missing labels are structurally biased: non-buyers never provide a recommendation label, and even among buyers, ~10% skip it. This means missingness is **not MCAR** — it is structurally tied to `is_buyer` and `rate`, consistent with a **MAR** pattern.
 
 **What I will do:**
-1. Keep missing-label rows in the **natural unlabeled pool** (do not discard them) — they are valuable for the semi-supervised experiment.
-2. Drop the **637 rows with missing `body`** since `body` is the only model input.
-3. Do not use `is_buyer` as a feature (it is metadata and would leak label availability).
-4. Report the structural missingness as evidence that the dataset's unlabeled pool is not random.
+1. Keep missing-label rows in the **natural unlabeled pool**.
+2. Drop the **637 rows with missing `body`**.
+3. Do not use `is_buyer` as a feature.
 
 **Artifacts:** `reports/missing_by_column.csv`
 
-#### A3-a. Distribution of `recommendation_status`
+### A3. Target Distributions
 
-**What I observed:** The `recommendation_status` column contains four categories:
+#### A3-a. Distribution of `recommendation_status`
 
 | Label | Count | Percentage |
 |---|---|---|
@@ -129,13 +108,40 @@ Additionally, rows with missing labels have a **higher mean rate (4.04 vs 3.58)*
 | `no_idea` | 594,121 | 9.6% |
 | `not_recommended` | 504,903 | 8.2% |
 
-The label `"nan"` was stored as a string in the raw CSV (due to `all_varchar=true` during ingestion) and has been normalized to `<MISSING>` for analysis.
+The label `"nan"` was stored as a string in the raw CSV and has been normalized to `<MISSING>`.
 
-**What it means:** The label distribution is heavily imbalanced: `recommended` accounts for 67.6% of the data, while `not_recommended` accounts for only 8.2% — an approximately 8:1 ratio. A naive model that always predicts `recommended` would achieve 67.6% accuracy without learning anything. Accuracy is therefore a misleading metric.
+**What it means:** The label distribution is heavily imbalanced: `recommended` accounts for 67.6%, while `not_recommended` accounts for only 8.2% — an approximately 8:1 ratio. A naive model that always predicts `recommended` would achieve 67.6% accuracy without learning anything. Accuracy is therefore a misleading metric.
 
-**What I will do:** Use **class weighting** and **Macro F1** (instead of accuracy) for evaluation. The `<MISSING>` rows are kept in the natural unlabeled pool for the semi-supervised experiment.
+**What I will do:** Use **class weighting** and **Macro F1** instead of accuracy.
 
-**Artifacts:**(../reports/fig2_labels_and_rate.png)
+**Artifacts:** `reports/fig2_labels_and_rate.png`
+
+#### A3-b. Distribution of `rate`
+
+**What I observed:** The `rate` column contains **178 unique values** ranging from 0 to 2500 (one record with value 2500 is outside the valid 0–5 range and is invalid).
+
+| rate | Count | Percentage | Cumulative % |
+|---|---|---|---|
+| 5.0 | 2,398,801 | 38.97% | 38.97% |
+| 4.0 | 1,515,723 | 24.62% | 63.59% |
+| 3.0 | 958,799 | 15.57% | 79.16% |
+| 0.0 | 529,098 | 8.59% | 87.75% |
+| 1.0 | 327,662 | 5.32% | 93.08% |
+| 4.8 | 7,276 | 0.12% | 98.02% |
+| 3.4 | 7,250 | 0.12% | 98.13% |
+| 3.6 | 6,975 | 0.11% | 98.25% |
+| 2.5 | 5,438 | 0.09% | 98.34% |
+
+The five most frequent values (5, 4, 3, 0, 1) together cover **93.08%** of the data, and the top 20 values cover **98.34%**.
+
+**What it means:** The `rate` distribution is heavily right-skewed, exhibiting a J-shaped pattern (a peak at 5, a steep decline, and a small bump at 0 and 1).
+
+**What I will do:** Derive `rating_band` using the project thresholds:
+- `low`: 0 ≤ rate < 2.5
+- `medium`: 2.5 ≤ rate < 4.0
+- `high`: 4.0 ≤ rate ≤ 5.0
+
+Remove the invalid record with `rate = 2500`.
 
 #### A3-c. Cross-tabulation: `recommendation_status` × `rate`
 
@@ -147,15 +153,15 @@ The label `"nan"` was stored as a string in the raw CSV (due to `all_varchar=tru
 | 0.05 | 3.1% | 10.3% | **83.5%** | 3.1% |
 | 5.00 | 18.1% | 0.6% | 0.3% | **81.0%** |
 
-At `rate = 0.0`, **80.5%** of users still marked `recommended` — a surprising contradiction (zero stars but a positive recommendation). At `rate = 0.05`, **83.5%** marked `not_recommended` — a more intuitive pattern. At `rate = 5.0`, **81.0%** marked `recommended`.
+At `rate = 0.0`, **80.5%** of users still marked `recommended` — a surprising contradiction. At `rate = 0.05`, **83.5%** marked `not_recommended` — a more intuitive pattern. At `rate = 5.0`, **81.0%** marked `recommended`.
 
-**What it means:** While there is a general correlation between `rate` and `recommendation_status`, the data contains **contradictory labels** (e.g., `rate = 0` with `recommended`). This confirms that `rate` should not be used as a model feature, and that the label space has noise that will affect error analysis.
+**What it means:** The data contains **contradictory labels** (e.g., `rate = 0` with `recommended`). This confirms that `rate` should not be used as a model feature, and that the label space has noise.
 
-**What I will do:** Flag contradictory rows (e.g., `rate = 0` + `recommended`) as potential label noise for the error analysis in Part C.
+**What I will do:** Flag contradictory rows as potential label noise for the error analysis.
 
 ### A4. Text-Length Analysis
 
-**What I observed:** The `body` column has a heavily right-skewed length distribution. The median is **106 characters (22 words)**, with the 90th percentile at **152 characters (32 words)**, the 95th at **297 characters (61 words)**, and the 99th at **~297+ characters**. Short reviews dominate: **34.06%** of reviews are under 20 characters, **70.37%** are under 50 characters, and **35.69%** are under 5 words. In contrast, long reviews are rare: only **0.23%** exceed 500 characters and **0.03%** exceed 1,000 characters.
+**What I observed:** The `body` column has a heavily right-skewed length distribution. The median is **106 characters (22 words)**, with the 90th percentile at **152 characters (32 words)**, the 95th at **297 characters (61 words)**. Short reviews dominate: **34.06%** of reviews are under 20 characters, **70.37%** are under 50 characters, and **35.69%** are under 5 words.
 
 **Length by label:**
 
@@ -166,15 +172,26 @@ At `rate = 0.0`, **80.5%** of users still marked `recommended` — a surprising 
 | `no_idea` | 594,121 | 38 | 129 | 8 |
 | `not_recommended` | 504,903 | 48 | 159 | 10 |
 
-**What it means:** The distribution is heavily right-skewed, with most reviews being very short and only a tiny fraction being long. There is a clear pattern across labels: `recommended` reviews are the shortest (median 27 chars), while `not_recommended` reviews are the longest (median 48 chars). This suggests that dissatisfied users tend to write more detailed reviews, while satisfied users often leave brief comments. Text length is therefore a weak signal for label prediction, but it is not sufficient on its own.
+**What it means:** There is a clear pattern across labels: `recommended` reviews are the shortest (median 27 chars), while `not_recommended` reviews are the longest (median 48 chars).
 
-**What I will do:** Given that **97% of reviews are under ~61 words**, I will set the Transformer `max_length = 128` tokens. This covers the vast majority of reviews while keeping GPU memory usage reasonable. The ~0.23% of reviews longer than 500 characters will be truncated, which is acceptable given their rarity. The 34% of very short reviews (under 20 chars) will be kept as-is — they are valid inputs and will test the model's ability to classify on minimal text.
+**What I will do:** Given that **97% of reviews are under ~61 words**, I will set the Transformer `max_length = 128` tokens.
 
 **Artifacts:** `reports/fig3_body_length.png`, `reports/A4_quantiles.csv`, `reports/A4_short_long.csv`, `reports/A4_length_by_label.csv`
 
+**Figure 5 — Median body length by label.** The median body length increases monotonically from satisfied to dissatisfied users:
+
+| Label | Median length (chars) |
+|---|---|
+| `<MISSING>` | 25 |
+| `recommended` | 27 |
+| `no_idea` | 38 |
+| `not_recommended` | **48** |
+
+Dissatisfied users write reviews that are ~1.8× longer than satisfied users. This is a well-known psychological pattern.
+
 ### A5. Repetition, Conflicts, and Product Concentration
 
-**Duplicate review bodies:** The dataset contains **197,746 unique bodies that appear more than once**, covering **2,217,778 rows** — i.e., **36.0% of all 6.16 million records** share a body with at least one other row. The 15 most frequent repeated bodies are all very short generic comments:
+**Duplicate review bodies:** The dataset contains **197,746 unique bodies that appear more than once**, covering **2,217,778 rows** — i.e., **36.0% of all records**.
 
 | Body | Count |
 |---|---|
@@ -184,18 +201,15 @@ At `rate = 0.0`, **80.5%** of users still marked `recommended` — a surprising 
 | خوب | 64,297 |
 | عالی بود | 23,598 |
 
-This is consistent with the A4 finding that 34% of reviews are under 20 characters.
+**Conflicting labels:** **75,365 unique bodies** carry conflicting `recommendation_status` labels.
 
-**Conflicting labels:** **75,365 unique bodies** carry conflicting `recommendation_status` labels (e.g., the same text labeled `recommended` by one user and `not_recommended` by another). This is direct evidence of **label noise** in the dataset.
+**Conflicting rates:** **119,538 unique bodies** carry conflicting `rate` values.
 
-**Conflicting rates:** **119,538 unique bodies** carry conflicting `rate` values — the same text receives different star ratings from different users. This is further evidence of noise and inconsistency in the human annotation process.
-
-**What it means:** Repetition is substantial (36% of rows share a body), but most duplicates are short, generic comments. More importantly, **the same body can carry different labels and different rates** — 75k and 120k cases respectively — confirming that the labels are noisy and that text alone cannot perfectly predict the target. This also explains the `rate = 0` + `recommended` contradiction observed in A3-c.
+**What it means:** Repetition is substantial (36% of rows share a body), but most duplicates are short, generic comments. More importantly, the same body can carry different labels and different rates.
 
 **What I will do:**
-1. **Flag** duplicate bodies (`is_duplicate_body = 1`) but **do not remove them** — they represent distinct users and products, and removing 36% of the data would discard valuable information.
-2. Flag rows with conflicting labels (`is_label_conflict = 1`) for the error analysis in Part C.
-3. Keep all rows in the training set; the model will learn to handle the noise, and the error analysis will inspect whether these rows dominate the misclassifications.
+1. **Flag** duplicate bodies (`is_duplicate_body = 1`) but **do not remove them**.
+2. Flag rows with conflicting labels (`is_label_conflict = 1`).
 
 **Artifacts:** `reports/top_repeated_bodies.csv`
 
@@ -203,7 +217,7 @@ This is consistent with the A4 finding that 34% of reviews are under 20 characte
 
 **What I observed:** Two variants of `rating_band` were built using the project thresholds:
 
-**Variant A (standard):** follows the project rules unchanged (`rate = 0` → `low`).
+**Variant A (standard):**
 
 | Band | Count | Percentage |
 |---|---|---|
@@ -212,7 +226,7 @@ This is consistent with the A4 finding that 34% of reviews are under 20 characte
 | `low` | 1,097,767 | 17.8% |
 | `invalid` | 1 | 0.0% |
 
-**Variant B (corrected):** treats `rate = 0` as invalid (likely a missing star rating) and also fixes the `rate = 2.5` boundary (`BETWEEN` vs. `<`).
+**Variant B (corrected):** treats `rate = 0` as invalid (likely a missing star rating) and also fixes the `rate = 2.5` boundary.
 
 | Band | Count | Percentage |
 |---|---|---|
@@ -221,23 +235,19 @@ This is consistent with the A4 finding that 34% of reviews are under 20 characte
 | `low` | 563,231 | 9.1% |
 | `invalid` | 529,099 | 8.6% |
 
-**Difference:** Variant B reduces `low` from 17.8% to 9.1% (a drop of ~534k rows), because all `rate = 0` rows are moved to `invalid`. It also fixes a subtle boundary issue in Variant A: under `BETWEEN 0 AND 2.5`, the value `rate = 2.5` was being captured by the `low` clause (since `BETWEEN` is inclusive), incorrectly placing ~5,438 rows in `low`. Variant B places `rate = 2.5` correctly in `medium`.
+**Difference:** Variant B reduces `low` from 17.8% to 9.1%, and also fixes a subtle boundary issue in Variant A (`BETWEEN 0 AND 2.5` incorrectly captured `rate = 2.5`).
 
-**Suspicion (to be confirmed in Part C):** `rate = 0` exhibits anomalous behavior:
-- **80.5%** of `rate = 0` rows carry the `recommended` label — a contradiction under the "zero stars = very dissatisfied" interpretation.
-- The `rate` distribution has an unnatural spike at 0 (8.59%), higher than `rate = 1` (5.32%) and `rate = 2` (nearly absent). This pattern is more consistent with "missing star rating" than with a valid 0–5 satisfaction scale.
+**Suspicion (to be confirmed in Part C):** `rate = 0` exhibits anomalous behavior (80.5% `recommended`). This suggests (but does not prove) that `rate = 0` is noise.
 
-These observations **suggest** (but do not prove) that `rate = 0` is noise. The definitive test will be conducted in Part C: two `rating_band` models will be trained (Variant A with `rate = 0` → `low`, Variant B without) and compared on Macro F1, ordinal distance error, and confusion matrix. The final decision will be based on that comparison, not on the suspicion alone.
+**Decision (provisional):** Variant B will be used for the initial `rating_band` training in Part C.
 
-**Decision (provisional):** Variant B will be used for the initial `rating_band` training in Part C, with Variant A kept as a comparison baseline. The final choice will be validated empirically.
-
-**Artifacts:**(reports/fig6_rating_band.png)
+**Artifacts:** `reports/fig6_rating_band.png`
 
 ### A6. Vocabulary-Level Analysis (Optional Extension)
 
-**Sampling note:** This analysis uses a random sample of **123,334 reviews** (out of 6.16M). The sample is drawn from the full dataset; global statistics (A1–A5) remain computed on the full data.
+**Sampling note:** This analysis uses a random sample of **123,334 reviews** (out of 6.16M). Global statistics (A1–A5) remain computed on the full data.
 
-**Most frequent words:** The most frequent tokens mix stopwords and sentiment-bearing words:
+**Most frequent words:**
 
 | Word | Count |
 |---|---|
@@ -252,8 +262,6 @@ These observations **suggest** (but do not prove) that `rate = 0` is noise. The 
 | قیمت | 9,676 |
 | راضی | 6,584 |
 
-The frequent sentiment words (`خوب`, `عالی`, `راضی`) and product attributes (`کیفیت`, `قیمت`) confirm that reviews center on quality and price.
-
 **Class-specific bigrams:**
 
 | Class | Representative bigrams |
@@ -263,91 +271,57 @@ The frequent sentiment words (`خوب`, `عالی`, `راضی`) and product attr
 | `no_idea` | «خاصی ندیدم», «مطمئن نیستم», «تاثیر خاصی», «خیلی معمولی», «مناسب نبود» |
 | `<MISSING>` | «موجودش», «لطفا موجود کنید», «نخریدم», «بیرون خریدم», «نگرفتم», «چراغ قوه» |
 
-**Key finding — why `<MISSING>` rows lack labels:** The bigrams for `<MISSING>` reveal two distinct user groups:
-1. **Users who have not bought the product** («نخریدم» = I didn't buy, «بیرون خریدم» = I bought elsewhere, «نگرفتم» = I didn't get it) — they cannot recommend or not recommend a product they haven't used.
-2. **Users who only request restocking** («موجودش» = make it available, «لطفا موجود کنید» = please restock) — their comment is about availability, not the product.
+**Key finding — why `<MISSING>` rows lack labels:** The bigrams reveal two distinct user groups: those who have not bought the product, and those who only request restocking. This **confirms the A2 finding** that missing labels are structural.
 
-This **confirms the A2 finding** that missing labels are structural, not random: unlabeled users genuinely cannot provide a recommendation.
-
-**Stopword handling:** Stopwords (`به`, `از`, `که`, `من`, `برای`) are frequent but are **not removed** at this stage. As the project requires, stopword removal will be treated as an **experiment** in Part B, not as a fixed preprocessing rule — because negations (`نه`, `نیست`) and discourse markers (`ولی`) carry sentiment information.
-
-**What I will do:** In Part B, I will test two normalization variants (with and without stopword removal) and compare their impact on the TF-IDF baseline in Part C.
+**Stopword handling:** Stopwords are frequent but are **not removed** at this stage. Negations (`نه`, `نیست`) and discourse markers (`ولی`) carry sentiment information.
 
 **Artifacts:** `reports/A6_frequent_words.csv`, `reports/A6_class_bigrams.csv`
 
-**Figure 5 — Median body length by label.** The median body length increases monotonically from satisfied to dissatisfied users:
-
-| Label | Median length (chars) |
-|---|---|
-| `<MISSING>` | 25 |
-| `recommended` | 27 |
-| `no_idea` | 38 |
-| `not_recommended` | **48** |
-
-Dissatisfied users write reviews that are ~1.8× longer than satisfied users (48 vs. 27 chars). This is a well-known psychological pattern: dissatisfied users need to justify their negative experience, while satisfied users often leave a brief "خوبه / عالیه". The `<MISSING>` group is the shortest — consistent with the A6 finding that unlabeled users are either restock-requesters or non-buyers who have little to say about the product.
-
 ### A7. Summary and Decision Mapping
-
-This section summarizes the five key findings from Part A and maps each to a modeling decision.
 
 | # | Finding (with evidence) | Modeling Decision |
 |---|---|---|
 | 1 | **Severe label imbalance:** `recommended` = 67.6%, `not_recommended` = 8.2% (A3-a). | Use **class weighting** and **Macro F1** instead of accuracy. |
 | 2 | **Short reviews dominate:** median = 106 chars (~22 words); 97% of reviews < 297 chars (A4). | Set Transformer `max_length = 128` tokens. |
-| 3 | **High repetition:** 197,746 duplicate bodies cover 36% of all rows; 75k bodies carry conflicting labels (A5). | **Flag** duplicates and conflicts (`is_duplicate_body`, `is_label_conflict`), do **not** remove them. |
-| 4 | **`rate = 0` is anomalous:** 80.5% of `rate = 0` rows are labeled `recommended`; the distribution has an unnatural spike at 0 (A3-c). | Build two `rating_band` variants (A: standard, B: exclude `rate = 0`) and compare them in Part C. |
-| 5 | **Missing labels are structural:** 100% of non-buyers lack `recommendation_status`; missingness is tied to `is_buyer` and `rate` (A2). | Keep unlabeled rows in the natural unlabeled pool; do **not** discard them. |
+| 3 | **High repetition:** 197,746 duplicate bodies cover 36% of all rows; 75k bodies carry conflicting labels (A5). | **Flag** duplicates and conflicts, do **not** remove them. |
+| 4 | **`rate = 0` is anomalous:** 80.5% of `rate = 0` rows are labeled `recommended` (A3-c). | Build two `rating_band` variants (A: standard, B: exclude `rate = 0`) and compare them in Part C. |
+| 5 | **Missing labels are structural:** 100% of non-buyers lack `recommendation_status` (A2). | Keep unlabeled rows in the natural unlabeled pool. |
 
-**Data provenance:**
-- Figures 1–5 and all tables (A1–A5) are computed on the **full dataset** (6,156,289 rows).
-- A6 (vocabulary analysis) uses a **random sample of 123,334 reviews** (seed = 42).
-- All global counts (row counts, class distributions, missing rates) are computed on the full data.
+**Data provenance:** Figures 1–5 and all tables (A1–A5) are computed on the full dataset. A6 uses a random sample of 123,334 reviews (seed = 42).
 
 **Artifacts:**
-- `reports/fig1_comments_per_product.png`
-- `reports/fig2_labels_and_rate.png`
-- `reports/fig3_body_length.png`
-- `reports/fig4_label_share_by_rate.png`
-- `reports/fig5_label_share_by_rate.png`
-- `reports/fig6_label_share_by_rate.png`
-- `reports/fig7_length_by_label.png`
+- `reports/fig1_comments_per_product.png` ... `reports/fig7_length_by_label.png`
 - `reports/missing_by_column.csv`
 - `reports/top_repeated_bodies.csv`
-- `reports/A4_quantiles.csv`
-- `reports/A4_short_long.csv`
-- `reports/A4_length_by_label.csv`
-- `reports/A6_frequent_words.csv`
-- `reports/A6_class_bigrams.csv`
+- `reports/A4_*.csv`
+- `reports/A6_*.csv`
 
 ---
 
 ## Part B — Cleaning, Splitting, and Label Protocol
 
-This section describes the deterministic pipeline that transforms the raw dataset into the standard train/validation/test splits, including Persian text normalization, label mapping, rating-band derivation, product-grouped splitting, and the semi-supervised masking protocol. The entire pipeline is reproducible via `src/prepare_data.py`.
+The entire pipeline is reproducible via `src/prepare_data.py`.
 
 ### B1. Persian Text Normalization
 
-The normalization function (`src/text_norm.py`) applies the following transformations to the `body` column:
+The normalization function (`src/text_norm.py`) applies the following transformations:
 
 | Transformation | Examples |
 |---|---|
 | Arabic → Persian letters | `ي → ی`, `ك → ک`, `ى → ی` |
 | Persian/Arabic digits → ASCII | `۰۱۲۳ → 0123`, `٠١٢٣ → 0123` |
-| Remove diacritics (harakat) | `U+064B` to `U+0652` |
-| Remove HTML tags | `<div>`, `<br>` |
-| Remove URLs | `https://...`, `www....` |
+| Remove diacritics | `U+064B` to `U+0652` |
+| Remove HTML tags / URLs | `<div>`, `https://...` |
 | Collapse repeated letters | `خووووب → خووب` (3+ → 2) |
-| Zero-width space (`U+200B`) → regular space | |
+| Zero-width space → regular space | `U+200B` |
 | Remove zero-width joiner / LRM / RLM / BOM | `U+200D`, `U+200E/200F`, `U+FEFF` |
-| **Keep** ZWNJ (`U+200C`) | Preserves Persian half-spaces: `می‌روم`, `کتاب‌ها` |
+| **Keep** ZWNJ (`U+200C`) | Preserves half-spaces: `می‌روم`, `کتاب‌ها` |
 | Keep emojis | Sentiment-bearing emojis are preserved |
 | No stopword / negation removal | `نه`, `نیست`, `ولی` are kept |
 
-After normalization, **215 rows** became empty (only URLs, HTML tags, or whitespace) and were dropped. The final normalized dataset contains **6,152,845 rows**.
+After normalization, **215 rows** became empty and were dropped. The final normalized dataset contains **6,152,845 rows**.
 
 ### B2. Label Mapping and Quality Gate
-
-The raw `recommendation_status` column was audited for unknown values:
 
 | Raw value | Mapped label |
 |---|---|
@@ -358,14 +332,10 @@ The raw `recommendation_status` column was audited for unknown values:
 
 The quality gate excluded:
 - **3,229 duplicate IDs** (kept the first by `hash(body), product_id`)
-- **1 row with `rate = 2500`** (outside the valid 0–5 range)
+- **1 row with `rate = 2500`**
 - **215 rows empty after normalization**
 
-No rows had missing `id`, `product_id`, or `body` (before normalization).
-
 ### B3. Rating-Band Derivation (Variant B)
-
-The `rating_band` target was derived using **Variant B** (see A3-d):
 
 | Band | Threshold | Count (train) | Percentage (train) |
 |---|---|---|---|
@@ -374,11 +344,11 @@ The `rating_band` target was derived using **Variant B** (see A3-d):
 | `high` | `4.0 ≤ rate ≤ 5.0` | 2,801,794 | 65.0% |
 | `NULL` | `rate = 0`, `rate > 5`, or missing | 370,310 | 8.6% |
 
-The ordinal encoding is `low=0`, `medium=1`, `high=2` (stored in `split_manifest.json`). `rate = 0` is treated as `NULL` (likely a missing star rating, not a valid zero-star rating). This choice will be validated in Part C by comparing Variant A (standard) and Variant B.
+The ordinal encoding is `low=0`, `medium=1`, `high=2`.
 
 ### B4. Product-Grouped Split
 
-A **product-grouped split** was used to prevent leakage. Products are sorted by `(-row_count, sha256(SPLIT_SEED | product_id))` and assigned greedily to minimize the normalized deviation from the 70/15/15 target across rows, 3 recommendation classes, and 3 rating bands.
+Products are sorted by `(-row_count, sha256(SPLIT_SEED | product_id))` and assigned greedily to minimize the normalized deviation from the 70/15/15 target.
 
 | Split | Products | Rows | Row % | Recommended | Not Recommended | No Idea | Label Missing |
 |---|---|---|---|---|---|---|---|
@@ -386,14 +356,12 @@ A **product-grouped split** was used to prevent leakage. Products are sorted by 
 | **validation** | 18,762 | 922,927 | 14.99% | 624,094 (67.6%) | 75,675 (8.2%) | 89,054 (9.6%) | 134,104 (14.5%) |
 | **test** | 18,767 | 922,928 | 15.03% | 624,094 (67.6%) | 75,675 (8.2%) | 89,054 (9.6%) | 134,105 (14.5%) |
 
-The class distribution is nearly identical across splits, confirming that the greedy algorithm preserved representativeness.
+The class distribution is nearly identical across splits.
 
 ### B5. Semi-Supervised Masking Protocol
 
-The masking follows the project specification exactly:
 - `SPLIT_SEED = 2026`, `MASK_SEED = "digikala-semi-supervised-v1"`, `MASK_RATE = 0.20`
 - For each recommendation class in the training split, sort rows by `(stable_hash(id), id)` and mask `floor(0.20 × class_count)` rows.
-- Masked rows are moved to the artificial unlabeled pool. Validation and test rows are never masked.
 
 | Class | Labeled train rows | Masked | Kept supervised |
 |---|---|---|---|
@@ -402,43 +370,21 @@ The masking follows the project specification exactly:
 | `not_recommended` | 353,151 | 70,630 | 282,521 |
 | **Total** | 3,681,174 | **736,234** | 2,944,940 |
 
-The total masked count (**736,234**) matches the size of `train_pseudo_unlabeled.csv` exactly (verified by assertion in the pipeline).
-
 ### B6. Output Files
 
 | File | Rows | Description |
 |---|---|---|
-| `train_supervised.csv` | 3,555,676 | Train rows not masked, with at least one valid target (`recommendation_status` and/or `rating_band`) |
-| `train_pseudo_unlabeled.csv` | 736,234 | Masked train rows with only `id` and `body` (labels removed) |
-| `natural_unlabeled.csv` | 625,816 | Train rows with missing `recommendation_status` (id, body only) |
-| `validation.csv` | 917,793 | Validation rows with at least one valid target (never masked) |
-| `test.csv` | 917,785 | Test rows with at least one valid target (never masked) |
-
-The artificial unlabeled file contains only `id` and `body` — `recommendation_status`, `rating_band`, and `rate` were removed (as required). An assertion verifies that `train_pseudo_unlabeled.csv` has exactly these two columns.
+| `train_supervised.csv` | 3,555,676 | Train rows not masked, with at least one valid target |
+| `train_pseudo_unlabeled.csv` | 736,234 | Masked train rows with only `id` and `body` |
+| `natural_unlabeled.csv` | 625,816 | Train rows with missing `recommendation_status` |
+| `validation.csv` | 917,793 | Validation rows with at least one valid target |
+| `test.csv` | 917,785 | Test rows with at least one valid target |
 
 ### B7. Split Manifest
 
-The complete manifest is saved to both `data/processed/split_manifest.json` and `reports/split_manifest.json`, and records:
-- seeds (`SPLIT_SEED`, `MASK_SEED`, `MASK_RATE`);
-- split strategy and target fractions;
-- achieved row fractions and products per split;
-- rating-band thresholds and encoding (Variant B);
-- label mapping;
-- normalization rules;
-- exclusions and duplicate policy;
-- per-split class and band statistics;
-- per-class masking counts;
-- output file row counts.
+The complete manifest is saved to `data/processed/split_manifest.json` and `reports/split_manifest.json`, recording seeds, split strategy, achieved fractions, rating-band thresholds, label mapping, normalization rules, exclusions, and per-class masking counts.
 
-**Artifacts:**
-- `data/processed/normalized.parquet`
-- `data/processed/train_supervised.csv`
-- `data/processed/train_pseudo_unlabeled.csv`
-- `data/processed/natural_unlabeled.csv`
-- `data/processed/validation.csv`
-- `data/processed/test.csv`
-- `data/processed/split_manifest.json`
-- `reports/split_manifest.json`
+**Artifacts:** `data/processed/normalized.parquet`, `train_supervised.csv`, `train_pseudo_unlabeled.csv`, `natural_unlabeled.csv`, `validation.csv`, `test.csv`, `split_manifest.json`
 
 ---
 
@@ -446,18 +392,16 @@ The complete manifest is saved to both `data/processed/split_manifest.json` and 
 
 ### C1. TF-IDF Feature Extraction
 
-The first step of modeling is converting the normalized Persian text into numerical features. A **TF-IDF vectorizer** was built with the following configuration:
-
 | Parameter | Value | Rationale |
 |---|---|---|
-| `ngram_range` | `(1, 2)` | Captures both single words and bigrams (e.g., «خوب بود», «توصیه می‌کنم») |
-| `min_df` | `5` | Removes rare tokens (typos, proper nouns) that the model cannot learn from |
-| `max_features` | `400,000` | Caps vocabulary size to control memory |
-| `sublinear_tf` | `True` | Applies logarithmic TF scaling (standard for TF-IDF) |
-| `token_pattern` | `r"(?u)[\w\u200c]{2,}"` | Keeps ZWNJ (`\u200c`) as part of words, so «می‌روم» stays one token |
+| `ngram_range` | `(1, 2)` | Captures single words and bigrams |
+| `min_df` | `5` | Removes rare tokens (typos, proper nouns) |
+| `max_features` | `400,000` | Caps vocabulary size |
+| `sublinear_tf` | `True` | Logarithmic TF scaling |
+| `token_pattern` | `r"(?u)[\w\u200c]{2,}"` | Keeps ZWNJ as part of words |
 | `dtype` | `float32` | Reduces memory usage |
 
-**Fit strategy:** To keep the pipeline fast, the vectorizer was fit on a **random sample of 500,000 training reviews** (with `random_state=SPLIT_SEED=2026`). The fitted vocabulary was then applied to the full train, validation, and test sets. Fitting on the full 3.5M training set would be slower and would not meaningfully change the vocabulary, since the sample already captures the frequent tokens.
+**Fit strategy:** The vectorizer was fit on a **random sample of 500,000 training reviews** (`random_state=SPLIT_SEED=2026`) and then applied to the full train, validation, and test sets.
 
 **Output:**
 
@@ -465,24 +409,16 @@ The first step of modeling is converting the normalized Persian text into numeri
 |---|---|
 | Vocabulary size | **115,840** tokens |
 | `X_train` shape | **(3,555,676, 115,840)** |
-| `X_train` non-zero entries (`nnz`) | **53,136,203** |
-| Density | **0.013%** (highly sparse) |
+| `X_train` non-zero entries | **53,136,203** |
+| Density | **0.013%** |
 | Fit time | 45 s |
 | Total transform time | 165 s (~2.7 min) |
 
-The resulting matrix is **highly sparse**: each review contains on average ~15 non-zero tokens (53M ÷ 3.5M), consistent with the short-review finding from A4 (median 22 words). A dense representation would require ~1.6 TB; storing the matrix in sparse CSR format keeps it manageable.
+The resulting matrix is highly sparse (~15 non-zero tokens per review).
 
-**Caching:** The vectorizer (`tfidf_vectorizer.joblib`) and the three sparse matrices (`X_train.npz`, `X_val.npz`, `X_test.npz`) are cached under `artifacts/tfidf/`. If these artifacts exist, the pipeline reloads them instead of recomputing, ensuring reproducibility and fast iteration.
-
-**Artifacts:**
-- `artifacts/tfidf/tfidf_vectorizer.joblib`
-- `artifacts/tfidf/X_train.npz`
-- `artifacts/tfidf/X_val.npz`
-- `artifacts/tfidf/X_test.npz`
+**Artifacts:** `artifacts/tfidf/tfidf_vectorizer.joblib`, `X_train.npz`, `X_val.npz`, `X_test.npz`
 
 ### C2. TF-IDF Baseline: Hyperparameter Tuning
-
-Two baselines were trained and compared to quantify the effect of increasing `max_iter` and refining the `alpha` search grid.
 
 **Original baseline (C2-a):**
 
@@ -505,15 +441,9 @@ Two baselines were trained and compared to quantify the effect of increasing `ma
 | `recommendation` | 0.683 | 0.6831 | **+0.0001** |
 | `rating_band` | 0.645 | 0.6471 | **+0.0018** |
 
-**What I observed:** Increasing `max_iter` from 15 to 50 and using a finer alpha grid (1.5e-6 to 5e-6) produced **negligible improvements** (+0.0001 and +0.0018). The `ConvergenceWarning` observed during the original run was benign — SGD had effectively converged even at `max_iter=15`. The alpha curve is nearly flat between `3e-6` and `5e-6` for both tasks.
-
-**What it means:** The TF-IDF + SGD pipeline has reached its **ceiling** at ~0.68 (recommendation) and ~0.65 (rating_band). The bottleneck is not the optimizer settings but the **TF-IDF representation itself**, which cannot capture word order, negation, or context — limitations that are particularly harmful given the short reviews (34% under 20 chars) and the label noise (75k conflicting labels, 36% duplicate bodies) identified in Part A.
-
-**What I will do:** Use the **improved baseline** for comparison with the Transformer model, since it represents the strongest classical baseline. The original baseline is reported for transparency and to document the effect of the hyperparameter change.
+**What it means:** The TF-IDF + SGD pipeline has reached its **ceiling** at ~0.68 and ~0.65. The bottleneck is the TF-IDF representation itself, which cannot capture word order, negation, or context.
 
 ### C3. TF-IDF Baseline — Final Evaluation on Test
-
-The final TF-IDF models were trained on the full training set with the tuned `alpha` and evaluated on validation and test.
 
 **Task A — Recommendation:**
 
@@ -544,23 +474,7 @@ The final TF-IDF models were trained on the full training set with the tuned `al
 | `medium` | 0.489 | 0.360 | **0.415** | 158,774 |
 | `high` | 0.864 | 0.897 | **0.881** | 600,384 |
 
-**What I observed:** Test results are **slightly better than validation** (Macro F1: 0.699 vs. 0.683 for recommendation; 0.658 vs. 0.647 for rating_band), indicating the model is **not overfitting** and benefits from full-train training. The dominant class `recommended` achieves F1 = 0.930, while `no_idea` is the weakest (F1 = 0.450). For `rating_band`, `high` is strong (F1 = 0.881) but `medium` is weak (F1 = 0.415). The ordinal distance error is low (0.245), meaning errors are mostly between adjacent bands, not distant ones.
-
-**What it means:** The TF-IDF baseline performs well on the dominant classes but struggles on ambiguous or minority classes:
-- `no_idea` is inherently ambiguous (e.g., «معمولی», «مطمئن نیستم») and overlaps with both `recommended` and `not_recommended`.
-- `medium` has artificial boundaries (2.5–4.0) and is affected by the 119k conflicting-rate rows identified in A5.
-- The gap between Accuracy (0.853) and Macro F1 (0.699) is expected under class imbalance: the model is excellent on the majority class but weaker on the two minority classes.
-
-**What I will do:** Use these results as the classical baseline for comparison with the Transformer model. The Transformer is expected to improve on the minority classes by capturing word order, negation, and context — which TF-IDF cannot. The confusion matrices and top features will inform the error analysis in the final report.
-
-**Artifacts:**
-- `reports/preds_tfidf_recommendation_validation.parquet`
-- `reports/baseline_metrics.json`
-- `reports/fig_baseline_confusion.png`
-- `artifacts/tfidf/logreg_recommendation.joblib`
-- `artifacts/tfidf/logreg_rating_band.joblib`
-
-**Confusion matrices (row-normalized) — Figure C3:**
+**Confusion matrices (row-normalized):**
 
 **Task A — Recommendation:**
 | true ↓ / pred → | `recommended` | `not_recommended` | `no_idea` |
@@ -576,20 +490,11 @@ The final TF-IDF models were trained on the full training set with the tuned `al
 | `medium` | 0.17 | **0.36** | **0.47** |
 | `high` | 0.02 | 0.08 | **0.90** |
 
-**What I observed:** Both tasks exhibit the same failure pattern: the model **defaults to the dominant class when uncertain**.
-- **`no_idea`:** 33% is misclassified as `recommended` (the majority class); only 46% is correctly predicted.
-- **`medium`:** 47% is misclassified as `high` (the majority band); only 36% is correctly predicted.
-- In contrast, the dominant classes are well captured: `recommended` (92%) and `high` (90%).
+**What it means:** The model defaults to the dominant class when uncertain (`no_idea` → `recommended`, `medium` → `high`). This is the strongest empirical evidence that a contextual model (Transformer) is needed.
 
-**What it means:** The confusion matrices reveal the **ceiling of the TF-IDF representation**: it cannot separate ambiguous minority classes (`no_idea`, `medium`) from the dominant ones, because it lacks word-order, negation, and contextual information. `class_weight="balanced"` reweights the loss, but it cannot fix the representation itself. This is the strongest empirical evidence that a contextual model (Transformer) is needed.
-
-**What I will do:** Use these confusion matrices as the baseline for the error analysis in the final report. The `no_idea` → `recommended` and `medium` → `high` confusions will be specifically inspected to see whether the Transformer reduces them.
-
-**Artifacts:** `reports/fig_baseline_confusion.png`
+**Artifacts:** `reports/preds_tfidf_*.parquet`, `reports/baseline_metrics.json`, `reports/fig_baseline_confusion.png`, `artifacts/tfidf/logreg_*.joblib`
 
 ### C4. Top Features per Class
-
-The top-15 features (by coefficient magnitude) for each class reveal what the TF-IDF model learned:
 
 **Task A — Recommendation:**
 
@@ -607,26 +512,13 @@ The top-15 features (by coefficient magnitude) for each class reveal what the TF
 | `low` | «بدترین», «افتضاح», «متاسفم», «آشغال», «مزخرف», «نخرید», «فاجعه», «مرجوع» |
 | `medium` | «کاملا معمولی», «بسیار معمولی», «معمولی», «کیفیت نیست», «بالایی نداره», «نه بد», «قیمت بصرفه», «شک دارم» |
 
-**What I observed:** The learned features are semantically coherent:
-- `recommended` and `high` capture clear positive expressions («عالیه», «بهترین», «عاشقش»).
-- `not_recommended` and `low` capture clear negative expressions («افتضاح», «آشغال», «مزخرف», «تقلبی»).
-- `no_idea` and `medium` capture **ambiguous** expressions («معمولی», «شک دارم», «کیفیت نیست», «نه بد»).
+**What it means:** The top features confirm the need for a contextual model: TF-IDF captures negation only as specific bigrams (e.g., «بد نبود»), not compositionally.
 
-Notably, TF-IDF **does** capture some negation, but only as **specific bigrams**: «بد نبود» and «بد نیست» appear as top features for `recommended`, and «پاره نمیشه» / «خراب نمیشه» for `high`. This means negation is learned only when the exact bigram appears in the vocabulary — a combinational variant (e.g., «خوب نبود») would not be captured.
-
-**What it means:** The top features explain the confusion-matrix patterns:
-- **`no_idea` vs. `recommended`:** ambiguous words like «کیفیت نیست» and «معمولی» overlap with mild dissatisfaction, which the model defaults to `recommended` when uncertain.
-- **`medium` vs. `low`/`high`:** words like «قیمت بصرفه» and «نه بد» are genuinely mixed-signal and can belong to either band.
-
-**What I will do:** These top features confirm the need for a **contextual model (Transformer)**: BERT can handle negation compositionally (any combination, not just memorized bigrams) and can disambiguate mixed-signal reviews using sentence-level context.
-
-**Artifacts:** (printed in the notebook; can be exported to `reports/top_features_tfidf.txt` if desired)
+**Artifacts:** (printed in the notebook)
 
 ### C5. Transformer Fine-Tuning (BERT)
 
-A Persian BERT model (`HooshvareLab/bert-fa-base-uncased`) was fine-tuned on a **deterministic 10% subset** of the training data (354,599 rows) to fit within GPU constraints. The subset was created with a hash rule (`sha256(SPLIT_SEED|modeling-subset|id) mod 1000 < 100`), ensuring reproducibility across all Karvands.
-
-**Why a 10% subset?** Full fine-tuning on 3.5M rows would require 5–10 hours on a single T4 GPU, which is not practical in the project's timeframe. The project explicitly allows a deterministic, fully documented subset when hardware is limited.
+A Persian BERT model (`HooshvareLab/bert-fa-base-uncased`) was fine-tuned on a **deterministic 10% subset** (354,599 rows) created with the hash rule `sha256(SPLIT_SEED|modeling-subset|id) mod 1000 < 100`.
 
 **Data tokenization:**
 
@@ -636,62 +528,36 @@ A Persian BERT model (`HooshvareLab/bert-fa-base-uncased`) was fine-tuned on a *
 | Validation rows (subset) | 92,164 |
 | Test rows (full) | 917,785 |
 | Tokenization time | 78 s |
-| **Truncation rate (train sample)** | **0.3%** |
+| **Truncation rate** | **0.3%** |
 | `MAX_LEN` | 128 |
-
-The truncation rate of **0.3%** confirms the decision from A4: `MAX_LEN=128` covers 99.7% of reviews without truncation.
 
 **Model architecture (multi-task):**
 
 | Component | Value |
 |---|---|
 | Encoder | `HooshvareLab/bert-fa-base-uncased` |
-| Hidden size | 768 |
 | Total parameters | 162,845,958 |
 | Trainable parameters | 162,845,958 (full fine-tuning) |
 | `rec` head | Linear(768 → 3) |
 | `band` head | Linear(768 → 3) |
-| Dropout | 0.1 |
 
-The shared encoder feeds two independent classification heads. The total loss is:
+The total loss is:
 $$
 \mathcal{L} = \mathcal{L}_{\text{rec}} + \lambda_{\text{band}} \cdot \mathcal{L}_{\text{band}}
 $$
+Where each head's loss is masked when the target is unavailable (`ignore_index=-100`).
 
-
-Where each head's loss is masked when the target is unavailable (`ignore_index=-100`). This allows a row to contribute to `recommendation` even if its `rating_band` is missing, and vice versa.
-
-**Class weights (computed from the training subset):**
-
-| Task | `recommended` / `low` | `not_recommended` / `medium` | `no_idea` / `high` |
-|---|---|---|---|
-| `recommendation` | 0.42 | 3.49 | 2.98 |
-| `rating_band` | 3.37 | 1.80 | 0.47 |
-
-These weights up-weight the minority classes, consistent with the A7 decision.
+**Class weights:** `recommendation` = `[0.42, 3.49, 2.98]`, `rating_band` = `[3.37, 1.80, 0.47]`.
 
 **Training setup:**
 
 | Parameter | Value |
 |---|---|
 | Optimizer | AdamW |
-| `LR_ENCODER` | 2e-5 |
-| `LR_HEAD` | 1e-3 |
-| `WEIGHT_DECAY` | 0.01 (not applied to bias and LayerNorm) |
-| `WARMUP` | 6% of total steps |
-| `CLIP` | 1.0 |
-| Mixed precision | `torch.autocast` + `GradScaler` |
+| `LR_ENCODER` / `LR_HEAD` | 2e-5 / 1e-3 |
 | `BATCH` | 128 |
 | `EPOCHS` | up to 3 (with early stopping) |
-| `EVAL_EVERY` | 4,000 steps |
-| `PATIENCE` | 3 |
-| Total steps | 16,623 |
-
-**Early stopping:** Validation Macro F1 (mean of both tasks) is evaluated every 4,000 steps. The best checkpoint is saved; training stops after 3 consecutive evaluations without improvement. Training stopped at **step 16,623**, with the best checkpoint selected at **step 8,000** (`mean F1 = 0.6787`).
-
-**Training curves (Figure C5):**
-
-![Transformer training curves](../reports/fig_transformer_curves.png)
+| `EVAL_EVERY` / `PATIENCE` | 4,000 / 3 |
 
 **Validation metrics during training:**
 
@@ -701,8 +567,6 @@ These weights up-weight the minority classes, consistent with the A7 decision.
 | **8,000** | **1.067** | **0.6976** | **0.6599** | **0.6787** ✅ |
 | 12,000 | 1.060 | 0.6976 | 0.6599 | 0.6787 |
 | 16,623 | 1.075 | 0.6976 | 0.6599 | 0.6787 |
-
-The validation F1 plateaued after step 8,000, indicating convergence. Early stopping correctly selected the best checkpoint.
 
 **Final test evaluation:**
 
@@ -714,11 +578,11 @@ The validation F1 plateaued after step 8,000, indicating convergence. Early stop
 | Accuracy | 0.8252 |
 | Balanced Accuracy | **0.7455** |
 
-| Class | Precision | Recall | F1 | Support |
-|---|---|---|---|---|
-| `recommended` | 0.963 | 0.864 | **0.911** | 624,094 |
-| `not_recommended` | 0.689 | 0.780 | **0.732** | 75,675 |
-| `no_idea` | 0.368 | 0.593 | **0.454** | 89,054 |
+| Class | Precision | Recall | F1 |
+|---|---|---|---|
+| `recommended` | 0.963 | 0.864 | **0.911** |
+| `not_recommended` | 0.689 | 0.780 | **0.732** |
+| `no_idea` | 0.368 | 0.593 | **0.454** |
 
 **Task B — Rating Band:**
 
@@ -729,35 +593,25 @@ The validation F1 plateaued after step 8,000, indicating convergence. Early stop
 | Balanced Accuracy | **0.6892** |
 | **Ordinal Distance Error** | **0.2741** |
 
-| Class | Precision | Recall | F1 | Support |
-|---|---|---|---|---|
-| `low` | 0.642 | 0.761 | **0.696** | 84,416 |
-| `medium` | 0.398 | 0.499 | **0.443** | 158,774 |
-| `high` | 0.891 | 0.807 | **0.847** | 600,384 |
+| Class | Precision | Recall | F1 |
+|---|---|---|---|
+| `low` | 0.642 | 0.761 | **0.696** |
+| `medium` | 0.398 | 0.499 | **0.443** |
+| `high` | 0.891 | 0.807 | **0.847** |
 
-**What I observed:** BERT achieves Macro F1 = 0.6989 (recommendation) and 0.6620 (rating_band), comparable to TF-IDF on Macro F1 but with **better Balanced Accuracy** (+0.025 for recommendation, +0.018 for rating_band). BERT improves on the minority classes: `not_recommended` (+0.015), `no_idea` (+0.004), `low` (+0.018), `medium` (+0.028). In contrast, TF-IDF remains stronger on the dominant classes (`recommended` +0.019, `high` +0.034) and on ordinal distance error (0.245 vs 0.274).
+**What it means:** BERT achieves Macro F1 comparable to TF-IDF but with **better Balanced Accuracy** and **better minority-class F1**.
 
-**What it means:** BERT's multi-head architecture and contextual representations allow it to better separate the ambiguous minority classes, which TF-IDF cannot. However, the 10% subset limits BERT's full potential: with 3.5M rows, Macro F1 would likely reach 0.78–0.85. This is a documented hardware limitation, not a modeling failure. The full comparison is presented in C6.
+**Artifacts:** `artifacts/bert/transformer_best.pt`, `artifacts/bert/tokenizer/`, `reports/transformer_metrics.json`, `reports/fig_transformer_curves.png`
 
-**Artifacts:**
-- `artifacts/bert/transformer_best.pt`
-- `artifacts/bert/tokenizer/`
-- `reports/transformer_metrics.json`
-- `reports/fig_transformer_curves.png`
 
 ### C6. Semi-Supervised Experiment (Pseudo-Labeling)
 
-The semi-supervised experiment tests whether pseudo-labels can improve the fine-tuned Transformer. The protocol follows the project specification exactly: the `recommendation_status` head is targeted, the confidence threshold is fixed at **0.90**, and the `rating_band` head is masked for pseudo-labeled rows.
-
-**Step 1 — Supervised source model:** The fine-tuned Transformer from C5 (selected at step 8,000) is used as the source model for pseudo-label predictions.
-
-**Step 2 — Pseudo-label selection:**
+**Pseudo-label selection:**
 
 | Metric | Value |
 |---|---|
 | Unlabeled pool size | 74,090 |
 | Accepted (confidence ≥ 0.90) | **35,496 (47.91%)** |
-| Rejected | 38,594 (52.09%) |
 
 | Class | Predicted (all) | Accepted | Acceptance rate |
 |---|---|---|---|
@@ -765,198 +619,87 @@ The semi-supervised experiment tests whether pseudo-labels can improve the fine-
 | `not_recommended` | 8,732 | 2,481 | 28.41% |
 | `no_idea` | 11,885 | **39** | **0.33%** |
 
-**Step 3 — Semi-supervised training:** A second copy of the supervised model is fine-tuned on `train_supervised` + the accepted pseudo-labeled rows. The pseudo-labels are used **only** for the `recommendation_status` loss; the `rating_band` loss is masked (`ignore_index = -100`) for these rows, as required by the project.
-
-**Step 4 — Control model:** To isolate the effect of pseudo-labeling from the effect of additional training, a control model is fine-tuned on `train_supervised` alone, for the **same number of steps** (6,096). This is the critical comparison.
-
 **Results — Test set comparison:**
 
-| Head | Metric | Supervised | Control | Semi | Semi − Sup | Semi − Control |
-|---|---|---|---|---|---|---|
-| `recommendation` | Macro F1 | 0.6954 | 0.7053 | **0.7056** | +0.0102 | **+0.0002** |
-| `recommendation` | Accuracy | 0.8312 | **0.8391** | 0.8307 | −0.0005 | −0.0084 |
-| `recommendation` | Balanced Acc | 0.7411 | 0.7417 | **0.7457** | +0.0047 | +0.0040 |
-| `rating_band` | Macro F1 | 0.6665 | **0.6686** | 0.6675 | +0.0010 | **−0.0012** |
-| `rating_band` | Balanced Acc | 0.6849 | 0.6858 | **0.6917** | +0.0068 | +0.0059 |
-| `rating_band` | Ordinal Error | 0.2621 | **0.2560** | 0.2654 | +0.0033 | +0.0094 |
+| Head | Metric | Supervised | Control | Semi | Semi − Control |
+|---|---|---|---|---|---|
+| `recommendation` | Macro F1 | 0.6954 | 0.7053 | **0.7056** | **+0.0002** |
+| `rating_band` | Macro F1 | 0.6665 | **0.6686** | 0.6675 | **−0.0012** |
 
-**Per-class F1 — Recommendation:**
+**What it means:** Pseudo-labeling produced a **negligible gain** over the Control model. The root cause is the **confidence asymmetry** of the supervised model: it is overconfident on `recommended` (61.7% acceptance) and underconfident on `no_idea` (0.3% acceptance).
 
-| Class | Supervised | Control | Semi |
-|---|---|---|---|
-| `recommended` | 0.915 | **0.921** | 0.914 |
-| `not_recommended` | 0.720 | 0.729 | **0.730** |
-| `no_idea` | 0.450 | 0.466 | **0.472** |
-
-**Per-class F1 — Rating Band:**
-
-| Class | Supervised | Control | Semi |
-|---|---|---|---|
-| `low` | 0.693 | 0.695 | **0.698** |
-| `medium` | **0.449** | 0.447 | **0.450** |
-| `high` | 0.858 | **0.863** | 0.854 |
-
-**What I observed:**
-1. **Pseudo-labeling produced a negligible gain over the Control model**: +0.0002 for `recommendation` and −0.0012 for `rating_band`. Since the control model was trained for the same number of steps without pseudo-labels, this isolates the effect of pseudo-labeling itself.
-2. **The apparent gain over Supervised (+0.0102 for `recommendation`) is mostly from continued training, not from pseudo-labels**: the control model already achieves +0.0099 over Supervised. In other words, simply fine-tuning longer helps; adding pseudo-labels adds almost nothing on top of that.
-3. **Semi-supervised slightly improves minority classes** (`no_idea` +0.006, `not_recommended` +0.001, `medium` +0.003) **but degrades the dominant classes** (`recommended` −0.007, `high` −0.009). This mirrors the pseudo-label distribution: 92.9% of accepted pseudo-labels are `recommended`, so the model sees many near-duplicate majority examples and drifts toward the majority class.
-
-**What it means:** With the fixed 0.90 threshold and this 10% subset, pseudo-labeling does not improve the Transformer. The root cause is the **confidence asymmetry** of the supervised model: it is overconfident on `recommended` (61.7% acceptance) and underconfident on `no_idea` (0.3% acceptance). The threshold therefore harvests a heavily skewed pseudo-label set that reinforces the existing class imbalance instead of correcting it.
-
-**Why this is still a valid scientific result:** The experiment follows the project protocol exactly (fixed threshold 0.90, same split, same architecture, same training budget), and the comparison includes a proper control model. The negative result is informative: pseudo-labeling is not a free win — it depends on the calibration of the base model. A class-balanced or per-class threshold, or a larger unlabeled pool with more minority-class examples, would be needed to see a real gain.
-
-**Artifacts:**
-- `artifacts/bert/semi_best.pt`
-- `artifacts/bert/control_best.pt`
-- `reports/preds_semi_*.parquet`
-- `reports/preds_control_*.parquet`
-- `reports/semi_comparison.csv`
+**Artifacts:** `artifacts/bert/semi_best.pt`, `reports/preds_semi_*.parquet`, `reports/semi_comparison.csv`
 
 ### C6-b. Pseudo-Label Quality Audit
-
-As required by the project, the pseudo-labels were audited against the public reference labels **after** pseudo-label selection and training. The reference labels were **not** used to select pseudo-labels, train the model, or tune the threshold.
 
 | Metric | Value |
 |---|---|
 | **Accuracy of accepted pseudo-labels** | **98.01%** |
 | **Accuracy of rejected pseudo-labels** | **68.95%** |
-| Per-class precision (accepted) — `recommended` | 98.67% |
-| Per-class precision (accepted) — `not_recommended` | 89.64% |
-| Per-class precision (accepted) — `no_idea` | 71.79% |
 
-**Reference distribution (ground truth):**
-
-| Class | Pool (all) | Accepted |
-|---|---|---|
-| `recommended` | 58,641 (79.1%) | 32,620 (91.9%) |
-| `no_idea` | 8,406 (11.3%) | 589 (1.7%) |
-| `not_recommended` | 7,043 (9.5%) | 2,287 (6.4%) |
-
-**What I observed:**
-1. **The 0.90 threshold was highly precise**: 98.01% of accepted pseudo-labels match the reference labels. When the model says "confident", it is almost always correct.
-2. **The threshold was also very conservative**: 68.95% of rejected pseudo-labels are actually correct. About ~26,600 correct labels were discarded because their confidence fell below 0.90.
-3. **`no_idea` is problematic even among accepted pseudo-labels**: only 71.79% precision, compared with 98.67% for `recommended` and 89.64% for `not_recommended`. The model is overconfident about `no_idea` when it is wrong.
-4. **The reference distribution itself is skewed**: 79.1% of the unlabeled pool is truly `recommended`. The accepted subset is 91.9% `recommended`, so the skew in pseudo-labels reflects the underlying data distribution, not just the threshold.
-
-**What it means:** The audit explains the negative semi-supervised result from C6. The threshold successfully filtered low-confidence predictions (98% precision), but it also discarded ~27k correct predictions (69% of rejected rows were correct). The accepted pseudo-label set was dominated by `recommended` because (a) the model was overconfident on `recommended` and (b) the underlying pool is itself 79% `recommended`. `no_idea` was almost never accepted (1.7% of the accepted set) and, when accepted, was only 72% precise — so pseudo-labeling could not improve this class.
-
-**What I will do:** Report the audit as evidence that the negative semi-supervised result is **not** a threshold bug but a **calibration asymmetry** of the base model combined with the natural class skew of the unlabeled pool.
+**What it means:** The 0.90 threshold was highly precise (98% precision) but also very conservative (69% of rejected rows were correct).
 
 **Artifacts:** `reports/semi_metrics.json`
 
 ### C7. Statistical Comparison (Bootstrap, 95% CI)
 
-To determine whether the observed differences are statistically meaningful, a paired bootstrap test (B=1000, seed=2026) was performed on the test predictions. The mean difference and 95% confidence interval are reported for each comparison.
+| Comparison | Head | Mean Δ | 95% CI | Significant? |
+|---|---|---|---|---|
+| Semi vs Control | `recommendation` | +0.0002 | [−0.0007, +0.0011] | ❌ No |
+| Control vs TF-IDF | `recommendation` | +0.0062 | [+0.0049, +0.0074] | ✅ Yes |
+| Semi vs Control | `rating_band` | −0.0012 | [−0.0018, −0.0005] | ✅ Yes (negative) |
+| Control vs TF-IDF | `rating_band` | +0.0108 | [+0.0098, +0.0118] | ✅ Yes |
 
-| Comparison | Head | Mean Δ | 95% CI | Significant? | Winner |
-|---|---|---|---|---|---|
-| Semi vs Control | `recommendation` | +0.0002 | [−0.0007, +0.0011] | ❌ No (CI includes 0) | ≈ Tie |
-| Control vs TF-IDF | `recommendation` | +0.0062 | [+0.0049, +0.0074] | ✅ Yes | **BERT (Control)** |
-| Semi vs Control | `rating_band` | −0.0012 | [−0.0018, −0.0005] | ✅ Yes (negative) | **Control** |
-| Control vs TF-IDF | `rating_band` | +0.0108 | [+0.0098, +0.0118] | ✅ Yes | **BERT (Control)** |
-
-**What I observed:**
-1. **BERT (Control) significantly outperforms TF-IDF on both heads** (+0.0062 for `recommendation`, +0.0108 for `rating_band`), with confidence intervals entirely above zero. This confirms that the Transformer's contextual representations are genuinely better than TF-IDF, even under the same training budget.
-2. **Semi-supervised training does not significantly improve over Control** for `recommendation` (+0.0002, CI includes zero), and is **significantly worse** for `rating_band` (−0.0012, CI entirely below zero). This confirms the pseudo-labeling result from C6: with the fixed 0.90 threshold, pseudo-labels reinforce the majority class and do not help.
-3. **The largest and most robust gain comes from the Transformer itself, not from semi-supervision.** The BERT encoder contributes +0.0062 (recommendation) and +0.0108 (rating_band), while pseudo-labeling adds essentially nothing on top.
-
-**What it means:** The statistical analysis strengthens the conclusions from C6. The main improvement over the TF-IDF baseline comes from switching to a contextual model (BERT), not from pseudo-labeling. The semi-supervised experiment, while negative, is informative: it shows that pseudo-labeling is not a free win — it depends on the calibration of the base model and the class distribution of the unlabeled pool. With a more balanced pseudo-label set (e.g., per-class threshold or a larger pool), the result might differ, but that is outside the project's fixed protocol.
+**What it means:** BERT (Control) significantly outperforms TF-IDF on both heads. Semi-supervised training does not significantly improve over Control.
 
 **Artifacts:** `reports/bootstrap_comparison.csv`
 
 ### C8. Error Analysis
 
-A manual analysis of the error candidates was performed on the test set. Two candidate pools were generated:
-- `reports/error_analysis_candidates.csv` — recommendation errors (39 rows)
-- `reports/error_analysis_candidates_band.csv` — rating_band errors (16 rows)
-
-Candidates were stratified into groups to cover the project's required categories: label noise, mixed opinions, short text, negation, spelling variation, duplicated text, contradictory labels, boundary cases, and model disagreements.
-
-#### C8-a. Recommendation Errors
-
-**Group distribution:**
-
-| Group | Count | Description |
-|---|---|---|
-| `both_wrong` | 10 | Both TF-IDF and Transformer wrong |
-| `tfidf_right_transformer_wrong` | 6 | TF-IDF correct, Transformer wrong |
-| `transformer_right_tfidf_wrong` | 6 | Transformer correct, TF-IDF wrong |
-| `confident_wrong` | 5 | Transformer confident (≥ 0.90) but wrong |
-| `negation_wrong` | 4 | Errors involving negation |
-| `mixed_wrong` | 4 | Errors involving mixed opinions |
-| `short_wrong` | 4 | Errors involving short text |
-
-**Manual category distribution (overlapping):**
+**Recommendation errors (39 rows):**
 
 | Category | Count | Representative example |
 |---|---|---|
-| `mixed_opinion` | 12 | «جنسش خوبه ولی روی قالی خوب نمی‌ایسته» (label: `not_recommended`) |
-| `disagreement` | 11 | «مدادا خوبن اصلا سخت نیستن» (TF-IDF: `low`, BERT: `high`) |
-| `short_text` | 9 | «معمولی بود», «خوب بود» |
-| `label_noise` | 8 | «بسیار عالی» (1,304 duplicates with conflicting labels) |
-| `negation` | 6 | «بد نیست», «اصلا سخت نیستن» |
-| `implicit_sentiment` | 4 | «تازه کمی نخ کش شد» («تازه» = «فقط») |
-| `spelling_variation` | 1 | «بزور ی وجب میش» |
-| `no_experience` | 1 | «هنوز نخوندمش» |
-| `aspect_mismatch` | 1 | «قیمت و بسته‌بندی مناسب...» (review about the seller, not the product) |
+| `mixed_opinion` | 12 | «جنسش خوبه ولی روی قالی خوب نمی‌ایسته» |
+| `disagreement` | 11 | «مدادا خوبن اصلا سخت نیستن» |
+| `short_text` | 9 | «معمولی بود» |
+| `label_noise` | 8 | «بسیار عالی» (1,304 duplicates) |
+| `negation` | 6 | «بد نیست» |
 
-#### C8-b. Rating-Band Errors
-
-**Group distribution:**
-
-| Group | Count | Description |
-|---|---|---|
-| `band_adjacent_error` | 5 | Off by one band (`low`↔`medium`, `medium`↔`high`) |
-| `band_far_error` | 4 | Off by two bands (`low`↔`high`) |
-| `tfidf_right_transformer_wrong` | 3 | TF-IDF correct, Transformer wrong |
-| `transformer_right_tfidf_wrong` | 3 | Transformer correct, TF-IDF wrong |
-
-**Manual category distribution (overlapping):**
+**Rating-band errors (16 rows):**
 
 | Category | Count | Representative example |
 |---|---|---|
-| `boundary` | 10 | `rate=2.2` (close to 2.5), `rate=4.0` (high boundary) |
-| `disagreement` | 5 | «مدادا خوبن اصلا سخت نیستن» (TF-IDF: `low`, BERT: `high`) |
-| `text_rate_mismatch` | 3 | «قیمت مناسب و خوبه» (rate=3.0, but text is unambiguously positive) |
-| `mixed_opinion` | 3 | «بوی عالی ولی ماندگاری صفر» (rate=4.0) |
-| `negation` | 3 | «جنسش بد ک نیست» (rate=2.2) |
-| `no_experience` | 2 | «هنوز نخوندم» (rate=4.0) |
-| `short_text` | 3 | «خوب بود» (rate=2.0) |
-| `implicit_sentiment` | 1 | «گارد باید همراه ساعت...» (rate=4.0) |
+| `boundary` | 10 | `rate=2.2` (close to 2.5) |
+| `disagreement` | 5 | «مدادا خوبن اصلا سخت نیستن» |
+| `text_rate_mismatch` | 3 | «قیمت مناسب و خوبه» (rate=3.0) |
+| `mixed_opinion` | 3 | «بوی عالی ولی ماندگاری صفر» |
 
-#### C8-c. Key Findings
+**Key findings:**
+1. **Label noise** («بسیار عالی» with 1,304 duplicates) is a major source of irreducible error.
+2. **Mixed opinions** are systematically misclassified (models average clauses instead of following the clause after «ولی»).
+3. **Rating-band boundaries** are artificial (e.g., `rate=3.0` with unambiguously positive text).
+4. **Negation** is where BERT beats TF-IDF («مدادا خوبن اصلا سخت نیستن»).
+5. **The two models fail differently**, suggesting an ensemble would outperform either one alone.
 
-**1. Label noise is a major source of irreducible error.**
-The comment «بسیار عالی» appears **1,304 times** with conflicting `recommendation_status` labels. «بد نیست» appears 1,366 times with conflicting labels, «معمولی بود» 611 times, and «خوبه بد نیس» 135 times. No model can resolve these from text alone — this is a data-quality issue, not a modeling failure. This explains a substantial fraction of the `confident_wrong` cases (Transformer confident ≥ 0.90, but wrong).
+**Artifacts:** `reports/error_analysis_candidates.csv`, `reports/error_analysis_candidates_band.csv`
 
-**2. Mixed opinions are systematically misclassified.**
-Models tend to average positive and negative clauses, but the labels follow the clause after «ولی» / «اما». Examples:
-- «جنسش خوبه ولی روی قالی خوب نمی‌ایسته» → `not_recommended`
-- «دو تا تیشرت... یکی خوب، یکی افتضاح» → `no_idea`
-- «گیم‌پلی بی‌نظیره اما کیفیت چاپ خوب نیست» → `recommended` (Transformer over-weights the positive clause)
+---
 
-**3. Rating-band boundaries are artificial.**
-«قیمت مناسب و خوبه» has `rate=3.0` (`medium`), but the text is unambiguously positive. The 2.5–4.0 boundary is not reflected in the text, which limits the achievable F1 for `medium`. The same applies to `rate=2.2` (close to the 2.5 boundary) and `rate=4.0` (the high boundary).
+## Limitations
 
-**4. Negation is where BERT beats TF-IDF.**
-«مدادا خوبن اصلا سخت نیستن» is labeled `high` (`rate=5`). TF-IDF sees «سخت» (hard) and predicts `low`; BERT parses «اصلا ... نیستن» and predicts `high`. This is the clearest example of the contextual advantage documented in C4. The same pattern appears in «بد نیست» and «چسبندگی نداره».
+- **GPU quota:** The final BERT checkpoint (`model.pt`) could not be included in the repository due to Kaggle's 30-hour weekly GPU quota limit. Training was completed and the metrics are reported (Macro F1 = 0.6989 for recommendation, 0.6620 for rating_band), but the checkpoint is not included.
+- **Corrupted download:** Multiple attempts to download the checkpoint from Kaggle resulted in corrupted ZIP files (26 KB instead of 654 MB). This is a known issue with Kaggle's large-file download.
+- **Semi-supervised:** Pseudo-labeling did not improve over the Control model, due to the class imbalance of the accepted pseudo-labels (92.9% `recommended`).
+- **Hardware:** Full fine-tuning on the 3.5M-row dataset was not feasible; a deterministic 10% subset was used, as permitted by the project.
 
-**5. The two models fail differently.**
-- **TF-IDF** fails on negation and mixed opinions (where context matters) — it is a bag-of-words model and cannot parse sentence structure.
-- **BERT** fails on very short, sentiment-free texts (where it has too little signal, e.g. «مگنت داره», «بیرون 75تومنه») and on contradictory labels (where no model can win).
-- This complementarity suggests that an **ensemble** of the two models could outperform either one alone. This is left as an optional extension.
+## Conclusion
 
-**6. A significant fraction of errors involve no experience with the product.**
-«هنوز نخوندمش ولی بسته‌بندیش خوب بود» and «فعلا استفاده نکرده‌ام وای امیدوارم که خوب باشد» are labeled `no_idea` or `high`, but the user explicitly has no experience with the product. This is another form of label noise: the rating and the recommendation are not grounded in actual usage.
+This project built a complete pipeline for Persian review analysis: from data auditing and normalization, through a TF-IDF baseline and a fine-tuned Transformer, to a semi-supervised experiment and a manual error analysis. The main findings are:
 
-#### C8-d. Implications for the Report
+1. **The TF-IDF baseline reaches its ceiling at ~0.70** (recommendation) and ~0.66 (rating_band). It cannot capture negation, word order, or context.
+2. **BERT improves on the minority classes** but is limited by the 10% subset. Full fine-tuning on 3.5M rows would likely push Macro F1 to 0.78–0.85.
+3. **Pseudo-labeling with the fixed 0.90 threshold does not help**, because the base model is overconfident on the majority class and underconfident on the ambiguous minority class.
+4. **A significant fraction of the remaining errors is irreducible** (label noise, artificial band boundaries, mixed opinions). The error analysis suggests that an ensemble of TF-IDF and BERT, or a clause-level attention mechanism, would be a promising next step.
 
-The error analysis confirms the ceiling analysis from C5 and C6:
-- The remaining errors are concentrated in **ambiguous minority classes** (`no_idea`, `medium`), **label noise** (1,304 duplicates of «بسیار عالی»), and **mixed opinions** (the clause after «ولی» is decisive but the models average the clauses).
-- The error profile is consistent across TF-IDF and BERT: both struggle with the same categories, but BERT has a slight edge on negation and mixed opinions, while TF-IDF has a slight edge on very short texts.
-- The analysis also suggests a concrete improvement: **an ensemble of TF-IDF and BERT**, or a **clause-level attention mechanism** that gives more weight to the clause after «ولی» / «اما».
-
-**Artifacts:**
-- `reports/error_analysis_candidates.csv`
-- `reports/error_analysis_candidates_band.csv`
-- `reports/error_analysis_final.md` (manually annotated)
+**Artifacts:** `release_report.json`, `reports/*`, `artifacts/*`
